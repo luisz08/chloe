@@ -1,0 +1,17 @@
+{
+  "name": "chloe",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "test": "bun test",
+    "check": "bunx biome check --error-on-warnings .",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@biomejs/biome": "^1.9.0",
+    "bun-types": "^1.1.0"
+  }
+}

@@ -9,14 +9,14 @@
 
 **Purpose**: Bun workspace skeleton with all packages wired, TypeScript and Biome configured, passing `bun install && biome check . && bun test`.
 
-- [ ] T001 Create root `package.json` with `"workspaces": ["packages/*"]`, dev deps (`@anthropic-ai/sdk`, `biome`, `bun-types`), and scripts (`build`, `test`, `check`) at `/package.json`
-- [ ] T002 [P] Create root `tsconfig.json` with `strict: true`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `moduleResolution: "bundler"`, `types: ["bun-types"]`, and project references at `/tsconfig.json`
-- [ ] T003 [P] Create root `biome.json` with recommended rules, `noExplicitAny: error`, `noNonNullAssertion: error`, `noUnusedVariables: error`, formatter settings at `/biome.json`
-- [ ] T004 Create `packages/core/package.json` (`@chloe/core`, `private: true`) and `packages/core/tsconfig.json` (extends root) at `packages/core/`
-- [ ] T005 [P] Create `packages/cli/package.json` (`@chloe/cli`, dep: `@chloe/core: workspace:*`) and `packages/cli/tsconfig.json` at `packages/cli/`
-- [ ] T006 [P] Create `packages/api/package.json` (`@chloe/api`, dep: `@chloe/core: workspace:*`) and `packages/api/tsconfig.json` at `packages/api/`
-- [ ] T007 Add placeholder `src/index.ts` (exports one empty const) to each of `packages/core/`, `packages/cli/`, `packages/api/`
-- [ ] T008 Run `bun install` and verify workspace symlinks resolve; run `bunx biome check .` and `bun test` — both must exit 0
+- [x] T001 Create root `package.json` with `"workspaces": ["packages/*"]`, dev deps (`@anthropic-ai/sdk`, `biome`, `bun-types`), and scripts (`build`, `test`, `check`) at `/package.json`
+- [x] T002 [P] Create root `tsconfig.json` with `strict: true`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `moduleResolution: "bundler"`, `types: ["bun-types"]`, and project references at `/tsconfig.json`
+- [x] T003 [P] Create root `biome.json` with recommended rules, `noExplicitAny: error`, `noNonNullAssertion: error`, `noUnusedVariables: error`, formatter settings at `/biome.json`
+- [x] T004 Create `packages/core/package.json` (`@chloe/core`, `private: true`) and `packages/core/tsconfig.json` (extends root) at `packages/core/`
+- [x] T005 [P] Create `packages/cli/package.json` (`@chloe/cli`, dep: `@chloe/core: workspace:*`) and `packages/cli/tsconfig.json` at `packages/cli/`
+- [x] T006 [P] Create `packages/api/package.json` (`@chloe/api`, dep: `@chloe/core: workspace:*`) and `packages/api/tsconfig.json` at `packages/api/`
+- [x] T007 Add placeholder `src/index.ts` (exports one empty const) to each of `packages/core/`, `packages/cli/`, `packages/api/`
+- [x] T008 Run `bun install` and verify workspace symlinks resolve; run `bunx biome check .` and `bun test` — both must exit 0
 
 **Checkpoint**: `bun install && bunx biome check . && bun test` all pass. Workspace skeleton is ready.
 

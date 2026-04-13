@@ -1,0 +1,12 @@
+{
+  "name": "@chloe/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "chloe": "./src/index.ts"
+  },
+  "dependencies": {
+    "@chloe/core": "workspace:*"
+  }
+}
