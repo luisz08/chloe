@@ -30,20 +30,20 @@
 
 ### 2a: Storage Layer
 
-- [ ] T009 Define `StorageAdapter` interface with all methods (`createSession`, `getSession`, `listSessions`, `deleteSession`, `touchSession`, `appendMessage`, `getMessages`) in `packages/core/src/storage/adapter.ts`
-- [ ] T010 [P] Define `Session`, `SessionSummary`, `Message` TypeScript types in `packages/core/src/session/types.ts`
-- [ ] T011 Implement `SQLiteStorageAdapter` using `bun:sqlite` with DDL schema, WAL mode, foreign key pragmas, and all adapter methods in `packages/core/src/storage/sqlite.ts`; constructor MUST create parent directory (`~/.chloe/` or custom path) if absent before opening the database
-- [ ] T012 [P] Implement `slugify()` and `validateSessionId()` with all rules (lowercase, special-char replacement, consecutive-hyphen collapse, trim, empty/length rejection) in `packages/core/src/session/slug.ts`
-- [ ] T013 Write unit tests for `SQLiteStorageAdapter` using `:memory:` database (create/get/list/delete session, append/get messages, cascade delete) in `packages/core/src/storage/sqlite.test.ts`
-- [ ] T014 [P] Write unit tests for `slugify()` and `validateSessionId()` (all slugification rules, edge cases, rejection cases) in `packages/core/src/session/slug.test.ts`
+- [x] T009 Define `StorageAdapter` interface with all methods (`createSession`, `getSession`, `listSessions`, `deleteSession`, `touchSession`, `appendMessage`, `getMessages`) in `packages/core/src/storage/adapter.ts`
+- [x] T010 [P] Define `Session`, `SessionSummary`, `Message` TypeScript types in `packages/core/src/session/types.ts`
+- [x] T011 Implement `SQLiteStorageAdapter` using `bun:sqlite` with DDL schema, WAL mode, foreign key pragmas, and all adapter methods in `packages/core/src/storage/sqlite.ts`; constructor MUST create parent directory (`~/.chloe/` or custom path) if absent before opening the database
+- [x] T012 [P] Implement `slugify()` and `validateSessionId()` with all rules (lowercase, special-char replacement, consecutive-hyphen collapse, trim, empty/length rejection) in `packages/core/src/session/slug.ts`
+- [x] T013 Write unit tests for `SQLiteStorageAdapter` using `:memory:` database (create/get/list/delete session, append/get messages, cascade delete) in `packages/core/src/storage/sqlite.test.ts`
+- [x] T014 [P] Write unit tests for `slugify()` and `validateSessionId()` (all slugification rules, edge cases, rejection cases) in `packages/core/src/session/slug.test.ts`
 
 ### 2b: Tool Registry
 
-- [ ] T015 Define `Tool` interface (`name`, `description`, `inputSchema`, `execute`) in `packages/core/src/tools/types.ts`
-- [ ] T016 Implement `ToolRegistry` (`register`, `get`, `list` returning Anthropic-shaped tool array) with duplicate-name error in `packages/core/src/tools/registry.ts`
-- [ ] T017 [P] Implement `EchoTool` with input schema `{ message: string }` and execute returning message unchanged in `packages/core/src/tools/echo.ts`
-- [ ] T018 Write unit tests for `ToolRegistry` (register + get, unknown returns null, list shape, duplicate error) in `packages/core/src/tools/registry.test.ts`
-- [ ] T019 [P] Write unit tests for `EchoTool` (execute returns input) in `packages/core/src/tools/echo.test.ts`
+- [x] T015 Define `Tool` interface (`name`, `description`, `inputSchema`, `execute`) in `packages/core/src/tools/types.ts`
+- [x] T016 Implement `ToolRegistry` (`register`, `get`, `list` returning Anthropic-shaped tool array) with duplicate-name error in `packages/core/src/tools/registry.ts`
+- [x] T017 [P] Implement `EchoTool` with input schema `{ message: string }` and execute returning message unchanged in `packages/core/src/tools/echo.ts`
+- [x] T018 Write unit tests for `ToolRegistry` (register + get, unknown returns null, list shape, duplicate error) in `packages/core/src/tools/registry.test.ts`
+- [x] T019 [P] Write unit tests for `EchoTool` (execute returns input) in `packages/core/src/tools/echo.test.ts`
 
 ### 2c: ReAct Agent Loop
 
