@@ -47,14 +47,14 @@
 
 ### 2c: ReAct Agent Loop
 
-- [ ] T020 Define `AgentConfig`, `AgentCallbacks` (including `confirmTool?`), `RunResult` types in `packages/core/src/agent/types.ts`
-- [ ] T021 Implement `runLoop()` with full ReAct algorithm: stream text deltas, await `finalMessage()`, handle `tool_use` stop reason, call `confirmTool` callback, inject `tool_result` observations, loop until `end_turn` in `packages/core/src/agent/loop.ts`
-- [ ] T022 Implement `createAgent()` / `Agent` class wrapping `runLoop()` with session history load/save in `packages/core/src/agent/agent.ts`
-- [ ] T023 Write unit tests for `runLoop()` using mock Anthropic client stub: single turn no tools, tool call confirmed, tool call denied, multi-turn loop, unknown tool graceful handling in `packages/core/src/agent/loop.test.ts`
+- [x] T020 Define `AgentConfig`, `AgentCallbacks` (including `confirmTool?`), `RunResult` types in `packages/core/src/agent/types.ts`
+- [x] T021 Implement `runLoop()` with full ReAct algorithm: stream text deltas, await `finalMessage()`, handle `tool_use` stop reason, call `confirmTool` callback, inject `tool_result` observations, loop until `end_turn` in `packages/core/src/agent/loop.ts`
+- [x] T022 Implement `createAgent()` / `Agent` class wrapping `runLoop()` with session history load/save in `packages/core/src/agent/agent.ts`
+- [x] T023 Write unit tests for `runLoop()` using mock Anthropic client stub: single turn no tools, tool call confirmed, tool call denied, multi-turn loop, unknown tool graceful handling in `packages/core/src/agent/loop.test.ts`
 
 ### 2d: Core Exports
 
-- [ ] T024 Export all public APIs (`createAgent`, `Agent`, `StorageAdapter`, `SQLiteStorageAdapter`, `Tool`, `ToolRegistry`, `EchoTool`, all types) from `packages/core/src/index.ts`
+- [x] T024 Export all public APIs (`createAgent`, `Agent`, `StorageAdapter`, `SQLiteStorageAdapter`, `Tool`, `ToolRegistry`, `EchoTool`, all types) from `packages/core/src/index.ts`
 
 **Checkpoint**: `bun test` passes all core unit tests. `bunx biome check .` clean. Core library is ready.
 
