@@ -66,11 +66,11 @@
 
 **Independent Test**: Run `chloe chat --session demo`, send "Hello", observe streamed reply. Exit and re-run — prior context is recalled.
 
-- [ ] T025 Implement `printToken(text)` and `printLine(text)` stdout helpers in `packages/cli/src/ui/stream.ts`
-- [ ] T026 Implement `chatCommand({ session, yes })` with readline REPL loop, `Agent.run()` calls, streaming output via `onToken`, and clean exit on `exit` / Ctrl-C in `packages/cli/src/commands/chat.ts`
-- [ ] T027 Implement CLI entry `packages/cli/src/index.ts` with `parseArgs()`, `ANTHROPIC_API_KEY` fast-fail check, and dispatch to `chatCommand` (stubs for `serveCommand` and `sessionsCommand` OK at this stage)
-- [ ] T028 Wire `packages/cli` binary in `package.json` so `bun run packages/cli/src/index.ts chat --session demo` works
-- [ ] T029 Wire `SQLiteStorageAdapter` with `CHLOE_DB_PATH` env var default (`~/.chloe/chloe.db`) and `EchoTool` registered; confirm chat command completes a full turn
+- [x] T025 Implement `printToken(text)` and `printLine(text)` stdout helpers in `packages/cli/src/ui/stream.ts`
+- [x] T026 Implement `chatCommand({ session, yes })` with readline REPL loop, `Agent.run()` calls, streaming output via `onToken`, and clean exit on `exit` / Ctrl-C in `packages/cli/src/commands/chat.ts`
+- [x] T027 Implement CLI entry `packages/cli/src/index.ts` with `parseArgs()`, `ANTHROPIC_API_KEY` fast-fail check, and dispatch to `chatCommand` (stubs for `serveCommand` and `sessionsCommand` OK at this stage)
+- [x] T028 Wire `packages/cli` binary in `package.json` so `bun run packages/cli/src/index.ts chat --session demo` works
+- [x] T029 Wire `SQLiteStorageAdapter` with `CHLOE_DB_PATH` env var default (`~/.chloe/chloe.db`) and `EchoTool` registered; confirm chat command completes a full turn
 
 **Checkpoint**: `chloe chat --session demo` → message sent → streamed response → session history saved → resume on re-run works. US1 independently functional.
 
@@ -82,9 +82,9 @@
 
 **Independent Test**: Prompt the agent to echo something. Confirmation prompt appears. Confirming executes tool. Denying skips tool gracefully.
 
-- [ ] T030 Implement `confirm(toolName, input)` readline y/N prompt in `packages/cli/src/ui/confirm.ts`
-- [ ] T031 Wire `confirmTool` callback into `chatCommand`: when not `--yes`, pass `confirm()` as `callbacks.confirmTool`; when `--yes`, pass a callback that always returns `true`
-- [ ] T032 Manual test: run `chloe chat --session hitl-test`, send a message that triggers EchoTool, observe prompt, test confirm and deny paths
+- [x] T030 Implement `confirm(toolName, input)` readline y/N prompt in `packages/cli/src/ui/confirm.ts`
+- [x] T031 Wire `confirmTool` callback into `chatCommand`: when not `--yes`, pass `confirm()` as `callbacks.confirmTool`; when `--yes`, pass a callback that always returns `true`
+- [x] T032 Manual test: run `chloe chat --session hitl-test`, send a message that triggers EchoTool, observe prompt, test confirm and deny paths
 
 **Checkpoint**: Tool confirmation prompt appears; confirming executes EchoTool and output is visible; denying skips gracefully. US2 independently functional.
 
@@ -96,12 +96,12 @@
 
 **Independent Test**: `chloe serve` starts; `curl -N -X POST .../sessions/s1/messages -d '{"content":"Hello"}'` returns SSE stream.
 
-- [ ] T033 Implement `POST /sessions/:id/messages` SSE handler with `ReadableStream`, `onToken` forwarding, `[DONE]` sentinel, auto-confirm tool calls (no HITL in API mode) in `packages/api/src/handlers/messages.ts`
-- [ ] T034 [P] Implement `GET /sessions` handler returning JSON `SessionSummary[]` in `packages/api/src/handlers/sessions.ts`
-- [ ] T035 [P] Implement `DELETE /sessions/:id` handler with 200/404 JSON responses in `packages/api/src/handlers/sessions.ts`
-- [ ] T036 Implement router with URL pattern matching and 404/405 error responses in `packages/api/src/router.ts`
-- [ ] T037 Implement `Bun.serve()` with port resolution (`--port` > `PORT` env > 3000) and startup log in `packages/api/src/index.ts`
-- [ ] T038 Implement `serveCommand({ port })` in `packages/cli/src/commands/serve.ts` and wire into CLI dispatch
+- [x] T033 Implement `POST /sessions/:id/messages` SSE handler with `ReadableStream`, `onToken` forwarding, `[DONE]` sentinel, auto-confirm tool calls (no HITL in API mode) in `packages/api/src/handlers/messages.ts`
+- [x] T034 [P] Implement `GET /sessions` handler returning JSON `SessionSummary[]` in `packages/api/src/handlers/sessions.ts`
+- [x] T035 [P] Implement `DELETE /sessions/:id` handler with 200/404 JSON responses in `packages/api/src/handlers/sessions.ts`
+- [x] T036 Implement router with URL pattern matching and 404/405 error responses in `packages/api/src/router.ts`
+- [x] T037 Implement `Bun.serve()` with port resolution (`--port` > `PORT` env > 3000) and startup log in `packages/api/src/index.ts`
+- [x] T038 Implement `serveCommand({ port })` in `packages/cli/src/commands/serve.ts` and wire into CLI dispatch
 
 **Checkpoint**: `chloe serve` starts; all three API endpoints respond correctly; SSE stream observable with curl. US3 independently functional.
 
@@ -113,8 +113,8 @@
 
 **Independent Test**: Create two sessions, list shows both, delete removes one, list confirms removal.
 
-- [ ] T039 Implement `sessionsCommand({ subcommand, id })` with `list` (formatted table output) and `delete` (confirmation message or exit-1 error) in `packages/cli/src/commands/sessions.ts`
-- [ ] T040 Wire `sessionsCommand` into CLI dispatch in `packages/cli/src/index.ts`
+- [x] T039 Implement `sessionsCommand({ subcommand, id })` with `list` (formatted table output) and `delete` (confirmation message or exit-1 error) in `packages/cli/src/commands/sessions.ts`
+- [x] T040 Wire `sessionsCommand` into CLI dispatch in `packages/cli/src/index.ts`
 
 **Checkpoint**: `chloe sessions list` and `chloe sessions delete <id>` work. US4 independently functional.
 

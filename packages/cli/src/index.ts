@@ -1,4 +1,5 @@
 import { chatCommand } from "./commands/chat.js";
+import { serveCommand } from "./commands/serve.js";
 import { sessionsCommand } from "./commands/sessions.js";
 
 function parseArgs(): void {
@@ -64,7 +65,13 @@ function parseArgs(): void {
   }
 
   if (subcommand === "serve") {
-    console.log("Use chloe serve to start the API");
+    let port: number | undefined;
+    const portIndex = args.indexOf("--port");
+    if (portIndex !== -1 && args[portIndex + 1]) {
+      const parsed = Number.parseInt(args[portIndex + 1] ?? "", 10);
+      if (!Number.isNaN(parsed)) port = parsed;
+    }
+    serveCommand({ port });
     return;
   }
 
