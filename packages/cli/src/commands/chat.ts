@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import type { Interface as RLInterface } from "node:readline";
+import type { AgentCallbacks } from "@chloe/core";
 import { EchoTool, SQLiteStorageAdapter, createAgent, slugify } from "@chloe/core";
 import { confirm } from "../ui/confirm.js";
 import { printLine, printToken } from "../ui/stream.js";
@@ -9,6 +11,13 @@ interface ChatCommandOptions {
   session: string;
   yes: boolean;
 }
+
+// bun-types omits EventEmitter methods on readline.Interface; augment locally
+type RLEvents = RLInterface & {
+  on(event: "line", listener: (line: string) => void): void;
+  on(event: "close", listener: () => void): void;
+  on(event: "SIGINT", listener: () => void): void;
+};
 
 export async function chatCommand({ session, yes }: ChatCommandOptions): Promise<void> {
   const sessionId = slugify(session);
@@ -36,12 +45,12 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
     input: process.stdin,
     output: process.stdout,
     prompt: "> ",
-  });
+  }) as RLEvents;
 
   rl.prompt();
 
   await new Promise<void>((resolve) => {
-    rl.on("line", async (line) => {
+    rl.on("line", (line: string) => {
       const input = line.trim();
 
       if (input === "exit") {
@@ -56,14 +65,24 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
 
       rl.pause();
 
-      await agent.run(sessionId, input, {
-        onToken: (text) => printToken(text),
-        confirmTool: yes ? undefined : (toolName, toolInput) => confirm(toolName, toolInput),
-      });
+      const callbacks: AgentCallbacks = {
+        onToken: (text: string) => printToken(text),
+        ...(yes ? {} : { confirmTool: (name: string, inp: unknown) => confirm(name, inp) }),
+      };
 
-      printLine("");
-      rl.resume();
-      rl.prompt();
+      agent
+        .run(sessionId, input, callbacks)
+        .then(() => {
+          printLine("");
+          rl.resume();
+          rl.prompt();
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          printLine(`\nError: ${msg}`);
+          rl.resume();
+          rl.prompt();
+        });
     });
 
     rl.on("close", () => {

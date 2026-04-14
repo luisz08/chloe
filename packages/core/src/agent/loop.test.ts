@@ -70,11 +70,11 @@ function makeFinalTextMessage(text: string): Message {
     id: "msg_1",
     type: "message",
     role: "assistant",
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text } as TextBlock],
     model: "claude-test",
     stop_reason: "end_turn",
     stop_sequence: null,
-    usage: { input_tokens: 10, output_tokens: 10 },
+    usage: { input_tokens: 10, output_tokens: 10 } as Message["usage"],
   };
 }
 
@@ -87,7 +87,7 @@ function makeFinalToolMessage(id: string, name: string, input: unknown): Message
     model: "claude-test",
     stop_reason: "tool_use",
     stop_sequence: null,
-    usage: { input_tokens: 10, output_tokens: 10 },
+    usage: { input_tokens: 10, output_tokens: 10 } as Message["usage"],
   };
 }
 

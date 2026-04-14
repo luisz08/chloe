@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 interface ServeCommandOptions {
-  port?: number;
+  port: number | undefined;
 }
 
 export function serveCommand({ port }: ServeCommandOptions): void {

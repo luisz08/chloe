@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": ".",
+    "paths": {
+      "@chloe/core": ["./packages/core/src/index.ts"]
+    }
+  },
+  "include": ["packages/core/src/**/*", "packages/cli/src/**/*", "packages/api/src/**/*"]
+}

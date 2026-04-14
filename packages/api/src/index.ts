@@ -6,8 +6,9 @@ import { createRouter } from "./router.js";
 // Resolve port: --port flag > PORT env var > 3000
 function resolvePort(): number {
   const argIndex = process.argv.indexOf("--port");
-  if (argIndex !== -1 && process.argv[argIndex + 1]) {
-    const parsed = Number.parseInt(process.argv[argIndex + 1], 10);
+  const portArg = argIndex !== -1 ? process.argv[argIndex + 1] : undefined;
+  if (portArg) {
+    const parsed = Number.parseInt(portArg, 10);
     if (!Number.isNaN(parsed)) return parsed;
   }
   if (process.env.PORT) {
