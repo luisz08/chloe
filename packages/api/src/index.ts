@@ -1,6 +1,4 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { EchoTool, SQLiteStorageAdapter, createAgent } from "@chloe/core";
+import { EchoTool, SQLiteStorageAdapter, createAgent, loadConfig } from "@chloe/core";
 import { createRouter } from "./router.js";
 
 // Resolve port: --port flag > PORT env var > 3000
@@ -18,21 +16,17 @@ function resolvePort(): number {
   return 3000;
 }
 
-const apiKey = process.env.CHLOE_API_KEY;
-if (!apiKey) {
-  console.error("Error: CHLOE_API_KEY environment variable is required");
+const cfg = loadConfig();
+if (!cfg.provider.apiKey) {
+  console.error("Error: no API key configured. Run `chloe config init` or set CHLOE_API_KEY.");
   process.exit(1);
 }
 
-const model = process.env.CHLOE_MODEL ?? "claude-sonnet-4-6";
-const baseURL = process.env.CHLOE_BASE_URL;
-const dbPath = process.env.CHLOE_DB_PATH ?? join(homedir(), ".chloe", "chloe.db");
-
-const storage = new SQLiteStorageAdapter(dbPath);
+const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 const agent = createAgent({
-  model,
-  apiKey,
-  baseURL,
+  model: cfg.provider.model,
+  apiKey: cfg.provider.apiKey,
+  ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
   tools: [EchoTool],
   storage,
 });

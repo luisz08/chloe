@@ -1,0 +1,187 @@
+import { existsSync } from "node:fs";
+import { createInterface } from "node:readline";
+import {
+  CONFIG_PATH,
+  type ChloeConfig,
+  loadConfig,
+  maskSecret,
+  readFileConfig,
+  setConfigInFile,
+  writeConfig,
+} from "@chloe/core";
+
+// ─── Valid keys ───────────────────────────────────────────────────────────────
+
+const VALID_KEYS = [
+  "provider.api_key",
+  "provider.name",
+  "provider.model",
+  "provider.base_url",
+  "storage.db_path",
+] as const;
+
+type ValidKey = (typeof VALID_KEYS)[number];
+
+function isValidKey(key: string): key is ValidKey {
+  return (VALID_KEYS as readonly string[]).includes(key);
+}
+
+function printKeyError(key: string): void {
+  console.error(`Error: unknown config key '${key}'`);
+  console.error(`Valid keys: ${VALID_KEYS.join(", ")}`);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function ask(prompt: string, defaultValue = ""): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const display = defaultValue ? `${prompt} [${defaultValue}]: ` : `${prompt}: `;
+  return new Promise((resolve) => {
+    rl.question(display, (answer) => {
+      rl.close();
+      resolve(answer.trim() || defaultValue);
+    });
+  });
+}
+
+function getEffectiveValue(key: ValidKey, cfg: ChloeConfig): string {
+  switch (key) {
+    case "provider.api_key":
+      return cfg.provider.apiKey;
+    case "provider.name":
+      return cfg.provider.name;
+    case "provider.model":
+      return cfg.provider.model;
+    case "provider.base_url":
+      return cfg.provider.baseUrl;
+    case "storage.db_path":
+      return cfg.storage.dbPath;
+  }
+}
+
+const ENV_MAP: Record<ValidKey, string> = {
+  "provider.api_key": "CHLOE_API_KEY",
+  "provider.name": "CHLOE_PROVIDER",
+  "provider.model": "CHLOE_MODEL",
+  "provider.base_url": "CHLOE_BASE_URL",
+  "storage.db_path": "CHLOE_DB_PATH",
+};
+
+function sourceAnnotation(key: ValidKey): string {
+  const envVar = ENV_MAP[key];
+  if (process.env[envVar]) return `[from env: ${envVar}]`;
+
+  const fileConfig = readFileConfig();
+  if (fileConfig) {
+    const [section, field] = key.split(".") as [string, string];
+    const secObj = fileConfig[section as keyof typeof fileConfig] as Record<string, string>;
+    if (secObj[field]) return "[from file]";
+  }
+
+  return "[default]";
+}
+
+// ─── Subcommands ─────────────────────────────────────────────────────────────
+
+async function cmdInit(): Promise<void> {
+  if (existsSync(CONFIG_PATH)) {
+    const answer = await ask(`Config already exists at ${CONFIG_PATH}. Overwrite? [y/N]`);
+    if (answer.toLowerCase() !== "y") {
+      console.log("Cancelled.");
+      return;
+    }
+  }
+
+  const apiKey = await ask("API Key (required)");
+  if (!apiKey) {
+    console.error("Error: API key is required.");
+    process.exit(1);
+  }
+
+  const model = await ask("Model", "claude-sonnet-4-6");
+  const baseUrl = await ask("Base URL (optional, leave blank for default Anthropic endpoint)");
+
+  const cfg: ChloeConfig = {
+    provider: { apiKey, name: "anthropic", model, baseUrl },
+    storage: { dbPath: "" },
+  };
+
+  writeConfig(cfg);
+  console.log(`Config saved to ${CONFIG_PATH}`);
+}
+
+function cmdShow(): void {
+  const cfg = loadConfig();
+  const fileExists = existsSync(CONFIG_PATH);
+
+  if (!fileExists) {
+    console.log(`Note: no config file found at ${CONFIG_PATH}`);
+  }
+
+  const pad = 20;
+  for (const key of VALID_KEYS) {
+    let value = getEffectiveValue(key, cfg);
+    if (key === "provider.api_key" && value) value = maskSecret(value);
+    const source = sourceAnnotation(key);
+    console.log(`${key.padEnd(pad)} = ${value}  ${source}`);
+  }
+}
+
+function cmdGet(key: string): void {
+  if (!isValidKey(key)) {
+    printKeyError(key);
+    process.exit(1);
+  }
+  const cfg = loadConfig();
+  console.log(getEffectiveValue(key, cfg));
+}
+
+function cmdSet(key: string, value: string): void {
+  if (!isValidKey(key)) {
+    printKeyError(key);
+    process.exit(1);
+  }
+  setConfigInFile(key, value);
+  console.log(`Updated ${key} in ${CONFIG_PATH}`);
+}
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+export async function configCommand(args: string[]): Promise<void> {
+  const subcommand = args[0];
+
+  if (subcommand === "init") {
+    await cmdInit();
+    return;
+  }
+
+  if (subcommand === "show") {
+    cmdShow();
+    return;
+  }
+
+  if (subcommand === "get") {
+    const key = args[1];
+    if (!key) {
+      console.error("Error: chloe config get <key>");
+      process.exit(1);
+    }
+    cmdGet(key);
+    return;
+  }
+
+  if (subcommand === "set") {
+    const key = args[1];
+    const value = args[2];
+    if (!key || value === undefined) {
+      console.error("Error: chloe config set <key> <value>");
+      process.exit(1);
+    }
+    cmdSet(key, value);
+    return;
+  }
+
+  console.error(`Error: unknown config subcommand: '${subcommand ?? ""}'`);
+  console.error("Usage: chloe config <init|show|get|set>");
+  process.exit(1);
+}

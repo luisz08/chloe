@@ -1,10 +1,19 @@
 import { chatCommand } from "./commands/chat.js";
+import { configCommand } from "./commands/config.js";
 import { serveCommand } from "./commands/serve.js";
 import { sessionsCommand } from "./commands/sessions.js";
 
 function parseArgs(): void {
   const args = process.argv.slice(2);
   const subcommand = args[0];
+
+  if (subcommand === "config") {
+    configCommand(args.slice(1)).catch((err) => {
+      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    });
+    return;
+  }
 
   if (subcommand === "sessions") {
     const sessionsSubcommand = args[1];
@@ -31,11 +40,6 @@ function parseArgs(): void {
     }
 
     console.error(`Error: unknown sessions subcommand: '${sessionsSubcommand ?? ""}'`);
-    process.exit(1);
-  }
-
-  if (!process.env.CHLOE_API_KEY) {
-    console.error("Error: CHLOE_API_KEY is not set");
     process.exit(1);
   }
 
@@ -76,7 +80,7 @@ function parseArgs(): void {
   }
 
   if (!subcommand) {
-    console.error("Error: subcommand required (chat, sessions, serve)");
+    console.error("Error: subcommand required (config, chat, sessions, serve)");
     process.exit(1);
   }
 

@@ -1,6 +1,4 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { SQLiteStorageAdapter } from "@chloe/core";
+import { SQLiteStorageAdapter, loadConfig } from "@chloe/core";
 
 interface SessionsCommandOptions {
   subcommand: "list" | "delete";
@@ -22,8 +20,8 @@ function padEnd(str: string, length: number): string {
 }
 
 export async function sessionsCommand({ subcommand, id }: SessionsCommandOptions): Promise<void> {
-  const dbPath = process.env.CHLOE_DB_PATH ?? join(homedir(), ".chloe", "chloe.db");
-  const storage = new SQLiteStorageAdapter(dbPath);
+  const cfg = loadConfig();
+  const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 
   if (subcommand === "list") {
     const sessions = await storage.listSessions();

@@ -1,9 +1,7 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Interface as RLInterface } from "node:readline";
 import type { AgentCallbacks } from "@chloe/core";
-import { EchoTool, SQLiteStorageAdapter, createAgent, slugify } from "@chloe/core";
+import { EchoTool, SQLiteStorageAdapter, createAgent, loadConfig, slugify } from "@chloe/core";
 import { confirm } from "../ui/confirm.js";
 import { printLine, printToken } from "../ui/stream.js";
 
@@ -26,17 +24,18 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
     process.exit(1);
   }
 
-  const dbPath = process.env.CHLOE_DB_PATH ?? join(homedir(), ".chloe", "chloe.db");
-  const storage = new SQLiteStorageAdapter(dbPath);
+  const cfg = loadConfig();
+  if (!cfg.provider.apiKey) {
+    console.error("Error: no API key configured. Run `chloe config init` or set CHLOE_API_KEY.");
+    process.exit(1);
+  }
 
-  const model = process.env.CHLOE_MODEL ?? "claude-sonnet-4-6";
-  const apiKey = process.env.CHLOE_API_KEY ?? "";
-  const baseURL = process.env.CHLOE_BASE_URL;
+  const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 
   const agent = createAgent({
-    model,
-    apiKey,
-    baseURL,
+    model: cfg.provider.model,
+    apiKey: cfg.provider.apiKey,
+    ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
     tools: [EchoTool],
     storage,
   });

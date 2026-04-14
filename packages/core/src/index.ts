@@ -1,3 +1,15 @@
+// Config
+export {
+  CONFIG_PATH,
+  expandHome,
+  loadConfig,
+  maskSecret,
+  readFileConfig,
+  setConfigInFile,
+  writeConfig,
+} from "./config.js";
+export type { ChloeConfig, ProviderConfig, RawFileConfig, StorageConfig } from "./config.js";
+
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";
 export type { AgentCallbacks, AgentConfig, RunResult } from "./agent/types.js";
