@@ -1,11 +1,4 @@
-import {
-  EchoTool,
-  SQLiteStorageAdapter,
-  createAgent,
-  getLogger,
-  initLogger,
-  loadConfig,
-} from "@chloe/core";
+import { SQLiteStorageAdapter, createAgent, getLogger, initLogger, loadConfig } from "@chloe/core";
 import { createRouter } from "./router.js";
 
 // Resolve port: --port flag > PORT env var > 3000
@@ -37,7 +30,6 @@ const agent = createAgent({
   model: cfg.provider.model,
   apiKey: cfg.provider.apiKey,
   ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
-  tools: [EchoTool],
   storage,
 });
 

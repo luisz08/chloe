@@ -2,7 +2,6 @@ import { createInterface } from "node:readline";
 import type { Interface as RLInterface } from "node:readline";
 import type { AgentCallbacks } from "@chloe/core";
 import {
-  EchoTool,
   SQLiteStorageAdapter,
   createAgent,
   getLogger,
@@ -53,7 +52,6 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
     model: cfg.provider.model,
     apiKey: cfg.provider.apiKey,
     ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
-    tools: [EchoTool],
     storage,
   });
 
