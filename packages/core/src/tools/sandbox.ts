@@ -118,7 +118,7 @@ export function validateBashCommand(
       if (looksLikePath(token)) {
         const err = validatePath(token, settings.allowedPaths, cwd);
         if (err !== null) {
-          return `Access denied: argument ${token} is outside allowed directories`;
+          return err;
         }
       }
     }
