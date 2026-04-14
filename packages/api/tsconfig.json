@@ -5,10 +5,8 @@
     "outDir": "dist",
     "composite": false,
     "declaration": false,
-    "declarationMap": false,
-    "paths": {
-      "@chloe/core": ["../core/src/index.ts"]
-    }
+    "declarationMap": false
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "references": [{ "path": "../core" }]
 }
