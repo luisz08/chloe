@@ -5,6 +5,7 @@ import type { Tool } from "../tools/types.js";
 export interface AgentConfig {
   model: string;
   apiKey: string;
+  baseURL?: string;
   tools: Tool[];
   storage: StorageAdapter;
 }

@@ -34,8 +34,8 @@ function parseArgs(): void {
     process.exit(1);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("Error: ANTHROPIC_API_KEY is not set");
+  if (!process.env.CHLOE_API_KEY) {
+    console.error("Error: CHLOE_API_KEY is not set");
     process.exit(1);
   }
 

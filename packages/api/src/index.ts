@@ -18,19 +18,21 @@ function resolvePort(): number {
   return 3000;
 }
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
+const apiKey = process.env.CHLOE_API_KEY;
 if (!apiKey) {
-  console.error("Error: ANTHROPIC_API_KEY environment variable is required");
+  console.error("Error: CHLOE_API_KEY environment variable is required");
   process.exit(1);
 }
 
-const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
+const model = process.env.CHLOE_MODEL ?? "claude-sonnet-4-6";
+const baseURL = process.env.CHLOE_BASE_URL;
 const dbPath = process.env.CHLOE_DB_PATH ?? join(homedir(), ".chloe", "chloe.db");
 
 const storage = new SQLiteStorageAdapter(dbPath);
 const agent = createAgent({
   model,
   apiKey,
+  baseURL,
   tools: [EchoTool],
   storage,
 });

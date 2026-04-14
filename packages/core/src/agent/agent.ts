@@ -11,7 +11,7 @@ export class Agent {
 
   constructor(config: AgentConfig) {
     this.config = config;
-    this.client = new Anthropic({ apiKey: config.apiKey });
+    this.client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.registry = new ToolRegistry();
     for (const tool of config.tools) {
       this.registry.register(tool);

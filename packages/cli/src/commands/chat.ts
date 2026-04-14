@@ -29,12 +29,14 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
   const dbPath = process.env.CHLOE_DB_PATH ?? join(homedir(), ".chloe", "chloe.db");
   const storage = new SQLiteStorageAdapter(dbPath);
 
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
+  const model = process.env.CHLOE_MODEL ?? "claude-sonnet-4-6";
+  const apiKey = process.env.CHLOE_API_KEY ?? "";
+  const baseURL = process.env.CHLOE_BASE_URL;
 
   const agent = createAgent({
     model,
     apiKey,
+    baseURL,
     tools: [EchoTool],
     storage,
   });

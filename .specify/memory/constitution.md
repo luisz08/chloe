@@ -31,7 +31,7 @@ Tool execution requires explicit user confirmation unless `--yes` is passed. Thi
 - **Runtime**: Bun ≥ 1.1 (no Node.js shims)
 - **Language**: TypeScript (strictest settings — see Principle II)
 - **Static analysis**: Biome
-- **AI provider**: Anthropic Claude (`claude-sonnet-4-6` default, overridable via `ANTHROPIC_MODEL`)
+- **AI provider**: Anthropic Claude (`claude-sonnet-4-6` default, overridable via `CHLOE_MODEL`); configurable endpoint via `CHLOE_BASE_URL` for Anthropic-protocol-compatible providers (e.g., OpenRouter)
 - **Storage**: `bun:sqlite` (default); pluggable via `StorageAdapter` interface
 - **Test runner**: `bun test`
 - **Package structure**: Bun workspace — `packages/core`, `packages/cli`, `packages/api`
