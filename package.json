@@ -7,7 +7,7 @@
     "build": "bun run --filter '*' build",
     "test": "bun test",
     "check": "bunx biome check --error-on-warnings .",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "bunx tsc --noEmit -p tsconfig.check.json"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
