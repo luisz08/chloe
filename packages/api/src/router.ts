@@ -1,4 +1,5 @@
 import type { Agent, StorageAdapter } from "@chloe/core";
+import { getLogger } from "@chloe/core";
 import { handlePostMessage } from "./handlers/messages.js";
 import { handleDeleteSession, handleListSessions } from "./handlers/sessions.js";
 
@@ -10,17 +11,27 @@ function jsonError(message: string, status: number): Response {
 }
 
 export function createRouter(storage: StorageAdapter, agent: Agent) {
+  const log = getLogger("api");
+
   return async function router(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const pathname = url.pathname;
     const method = request.method;
+    const startMs = Date.now();
+
+    log.info("request", { method, path: pathname });
+
+    const respond = (r: Response): Response => {
+      log.debug("response", { status: r.status, elapsed_ms: Date.now() - startMs });
+      return r;
+    };
 
     // GET /sessions
     if (pathname === "/sessions") {
       if (method === "GET") {
-        return handleListSessions(request, storage, agent);
+        return respond(await handleListSessions(request, storage, agent));
       }
-      return jsonError("Method not allowed", 405);
+      return respond(jsonError("Method not allowed", 405));
     }
 
     // Routes with /sessions/:id
@@ -32,20 +43,20 @@ export function createRouter(storage: StorageAdapter, agent: Agent) {
       // POST /sessions/:id/messages
       if (parts[2] === "messages") {
         if (method === "POST") {
-          return handlePostMessage(request, storage, agent, sessionId);
+          return respond(await handlePostMessage(request, storage, agent, sessionId));
         }
-        return jsonError("Method not allowed", 405);
+        return respond(jsonError("Method not allowed", 405));
       }
 
       // DELETE /sessions/:id
       if (parts.length === 2) {
         if (method === "DELETE") {
-          return handleDeleteSession(request, storage, agent, sessionId);
+          return respond(await handleDeleteSession(request, storage, agent, sessionId));
         }
-        return jsonError("Method not allowed", 405);
+        return respond(jsonError("Method not allowed", 405));
       }
     }
 
-    return jsonError("Not found", 404);
+    return respond(jsonError("Not found", 404));
   };
 }
