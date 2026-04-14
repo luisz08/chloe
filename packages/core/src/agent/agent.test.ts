@@ -15,7 +15,11 @@ mock.module("@anthropic-ai/sdk", () => ({
       },
     };
     constructor(opts: { apiKey: string; baseURL?: string }) {
-      anthropicCalls.push({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+      anthropicCalls.push(
+        opts.baseURL !== undefined
+          ? { apiKey: opts.apiKey, baseURL: opts.baseURL }
+          : { apiKey: opts.apiKey },
+      );
     }
   },
 }));

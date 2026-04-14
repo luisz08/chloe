@@ -1,7 +1,15 @@
 import { createInterface } from "node:readline";
 import type { Interface as RLInterface } from "node:readline";
 import type { AgentCallbacks } from "@chloe/core";
-import { EchoTool, SQLiteStorageAdapter, createAgent, loadConfig, slugify } from "@chloe/core";
+import {
+  EchoTool,
+  SQLiteStorageAdapter,
+  createAgent,
+  getLogger,
+  initLogger,
+  loadConfig,
+  slugify,
+} from "@chloe/core";
 import { confirm } from "../ui/confirm.js";
 import { printLine, printToken } from "../ui/stream.js";
 
@@ -25,10 +33,19 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
   }
 
   const cfg = loadConfig();
+  initLogger(cfg.logging);
+  const log = getLogger("cli");
+
   if (!cfg.provider.apiKey) {
     console.error("Error: no API key configured. Run `chloe config init` or set CHLOE_API_KEY.");
     process.exit(1);
   }
+
+  log.debug("config loaded", {
+    provider: cfg.provider.name,
+    db_path: cfg.storage.dbPath,
+    log_dir: cfg.logging.logDir,
+  });
 
   const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 

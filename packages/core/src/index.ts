@@ -8,7 +8,17 @@ export {
   setConfigInFile,
   writeConfig,
 } from "./config.js";
-export type { ChloeConfig, ProviderConfig, RawFileConfig, StorageConfig } from "./config.js";
+export type {
+  ChloeConfig,
+  LoggingConfig,
+  ProviderConfig,
+  RawFileConfig,
+  StorageConfig,
+} from "./config.js";
+
+// Logger
+export { getLogger, initLogger } from "./logger/index.js";
+export type { LogLevel, Logger, LogSink } from "./logger/index.js";
 
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";

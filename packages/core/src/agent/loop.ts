@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import { getLogger } from "../logger/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { AgentCallbacks, RunResult } from "./types.js";
 
@@ -15,8 +16,11 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
   const { client, model, tools, callbacks } = options;
   const messages: MessageParam[] = [...options.messages];
   let finalText = "";
+  const log = getLogger("loop");
 
   for (;;) {
+    log.debug("llm request", { messages: messages.length, model });
+
     const stream = client.messages.stream({
       model,
       max_tokens: 4096,
@@ -50,6 +54,8 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       finalText = currentText;
     }
 
+    log.debug("stop reason", { reason: finalMessage.stop_reason });
+
     if (finalMessage.stop_reason === "end_turn") {
       break;
     }
@@ -73,12 +79,15 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       const toolName = block.name;
       const toolInput = block.input;
 
+      const inputStr = JSON.stringify(toolInput);
+      log.info("tool call", { tool: toolName, input: inputStr.slice(0, 200) });
       callbacks.onToolCall?.(toolName, toolInput);
 
       // Check confirmation
       if (callbacks.confirmTool !== undefined) {
         const confirmed = await callbacks.confirmTool(toolName, toolInput);
         if (!confirmed) {
+          log.debug("tool denied", { tool: toolName });
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
@@ -90,6 +99,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 
       const tool = tools.get(toolName);
       if (tool === null) {
+        log.warn("unknown tool", { tool: toolName });
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,
@@ -100,6 +110,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 
       try {
         const output = await tool.execute(toolInput);
+        log.debug("tool result", { tool: toolName, output_len: output.length });
         callbacks.onToolResult?.(toolName, output);
         toolResults.push({
           type: "tool_result",
@@ -108,6 +119,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        log.error("tool error", { tool: toolName, error: message });
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,

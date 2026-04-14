@@ -104,6 +104,7 @@ async function cmdInit(): Promise<void> {
   const cfg: ChloeConfig = {
     provider: { apiKey, name: "anthropic", model, baseUrl },
     storage: { dbPath: "" },
+    logging: { logDir: "", level: "info", maxSizeMb: 10, maxDays: 7 },
   };
 
   writeConfig(cfg);

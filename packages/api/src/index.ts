@@ -1,4 +1,11 @@
-import { EchoTool, SQLiteStorageAdapter, createAgent, loadConfig } from "@chloe/core";
+import {
+  EchoTool,
+  SQLiteStorageAdapter,
+  createAgent,
+  getLogger,
+  initLogger,
+  loadConfig,
+} from "@chloe/core";
 import { createRouter } from "./router.js";
 
 // Resolve port: --port flag > PORT env var > 3000
@@ -17,6 +24,9 @@ function resolvePort(): number {
 }
 
 const cfg = loadConfig();
+initLogger(cfg.logging);
+const log = getLogger("api");
+
 if (!cfg.provider.apiKey) {
   console.error("Error: no API key configured. Run `chloe config init` or set CHLOE_API_KEY.");
   process.exit(1);
@@ -39,4 +49,9 @@ Bun.serve({
   fetch: router,
 });
 
-console.log(`Chloe API listening on http://localhost:${port}`);
+log.info("server started", { port });
+log.debug("config loaded", {
+  provider: cfg.provider.name,
+  db_path: cfg.storage.dbPath,
+  log_dir: cfg.logging.logDir,
+});

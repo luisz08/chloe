@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { getLogger } from "../logger/index.js";
 import type { Message, Session, SessionSummary } from "../session/types.js";
 import type { StorageAdapter } from "./adapter.js";
 
@@ -79,6 +80,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     this.db
       .prepare("INSERT INTO sessions (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
       .run(id, name, now, now);
+    getLogger("storage").debug("session created", { session: id });
     return { id, name, createdAt: now, updatedAt: now };
   }
 
@@ -139,6 +141,11 @@ export class SQLiteStorageAdapter implements StorageAdapter {
         "SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
       )
       .all(sessionId);
-    return rows.map(rowToMessage);
+    const messages = rows.map(rowToMessage);
+    getLogger("storage").debug("session loaded", {
+      session: sessionId,
+      message_count: messages.length,
+    });
+    return messages;
   }
 }
