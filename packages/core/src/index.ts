@@ -33,6 +33,7 @@ export type { Message, Session, SessionSummary } from "./session/types.js";
 export { slugify, validateSessionId } from "./session/slug.js";
 
 // Tools
-export { EchoTool } from "./tools/echo.js";
 export { ToolRegistry } from "./tools/registry.js";
 export type { Tool } from "./tools/types.js";
+export { createDefaultTools, loadToolSettings } from "./tools/index.js";
+export type { ToolSettings } from "./tools/index.js";

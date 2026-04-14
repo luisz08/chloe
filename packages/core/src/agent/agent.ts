@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
+import { createDefaultTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { runLoop } from "./loop.js";
 import type { AgentCallbacks, AgentConfig, RunResult } from "./types.js";
@@ -14,7 +15,11 @@ export class Agent {
     this.config = config;
     this.client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.registry = new ToolRegistry();
-    for (const tool of config.tools) {
+    const tools =
+      config.tools !== undefined
+        ? config.tools
+        : createDefaultTools(loadToolSettings(process.cwd()), process.cwd());
+    for (const tool of tools) {
       this.registry.register(tool);
     }
   }

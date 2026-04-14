@@ -6,7 +6,7 @@ export interface AgentConfig {
   model: string;
   apiKey: string;
   baseURL?: string;
-  tools: Tool[];
+  tools?: Tool[];
   storage: StorageAdapter;
 }
 
