@@ -37,13 +37,10 @@ export function createRouter(storage: StorageAdapter, agent: Agent) {
         return jsonError("Method not allowed", 405);
       }
 
-      // DELETE /sessions/:id or GET /sessions/:id
+      // DELETE /sessions/:id
       if (parts.length === 2) {
         if (method === "DELETE") {
           return handleDeleteSession(request, storage, agent, sessionId);
-        }
-        if (method === "GET") {
-          return jsonError("Method not allowed", 405);
         }
         return jsonError("Method not allowed", 405);
       }
