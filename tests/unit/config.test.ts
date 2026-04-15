@@ -4,24 +4,24 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 // We import the internal helpers directly by path since they are not all exported
-// from the package index yet. loadConfig reads from the real home dir, so we
-// control the environment via env vars and temp files.
-import { CONFIG_PATH, expandHome, loadConfig, maskSecret } from "../../packages/core/src/config.ts";
+// from the package index yet. loadConfigFrom reads from a given path, avoiding
+// touching the real user config.
+import { expandHome, loadConfigFrom, maskSecret } from "../../packages/core/src/config.ts";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Import the default db path constant for accurate test expectations
+const DEFAULT_DB_PATH = join(homedir(), ".chloe", "sessions", "chloe.db");
 
-const OLD_DB = join(homedir(), ".chloe", "chloe.db");
-const NEW_DB = join(homedir(), ".chloe", "sessions", "chloe.db");
-const SETTINGS_DIR = join(homedir(), ".chloe", "settings");
-const SESSIONS_DIR = join(homedir(), ".chloe", "sessions");
+// ─── Test isolation: use temp directory, not real ~/.chloe ─────────────────────
+
+const TMP_DIR = join(homedir(), ".chloe-test-temp");
+const SETTINGS_DIR = join(TMP_DIR, "settings");
+const SESSIONS_DIR = join(TMP_DIR, "sessions");
+const CONFIG_PATH = join(SETTINGS_DIR, "config.toml");
+const NEW_DB = join(SESSIONS_DIR, "chloe.db");
 
 function writeToml(content: string): void {
   mkdirSync(SETTINGS_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, content, "utf-8");
-}
-
-function removeConfig(): void {
-  if (existsSync(CONFIG_PATH)) rmSync(CONFIG_PATH);
 }
 
 function clearEnv(): void {
@@ -34,6 +34,15 @@ function clearEnv(): void {
   ]) {
     delete process.env[key];
   }
+}
+
+function setupTempDir(): void {
+  mkdirSync(SETTINGS_DIR, { recursive: true });
+  mkdirSync(SESSIONS_DIR, { recursive: true });
+}
+
+function cleanupTempDir(): void {
+  if (existsSync(TMP_DIR)) rmSync(TMP_DIR, { recursive: true, force: true });
 }
 
 // ─── maskSecret ──────────────────────────────────────────────────────────────
@@ -77,114 +86,101 @@ describe("expandHome", () => {
 describe("loadConfig", () => {
   beforeEach(() => {
     clearEnv();
-    removeConfig();
+    cleanupTempDir();
+    setupTempDir();
   });
 
   afterEach(() => {
     clearEnv();
-    removeConfig();
+    cleanupTempDir();
   });
 
   it("returns all defaults when no config file and no env vars", () => {
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.apiKey).toBe("");
     expect(cfg.provider.name).toBe("anthropic");
     expect(cfg.provider.model).toBe("claude-sonnet-4-6");
     expect(cfg.provider.baseUrl).toBe("");
-    expect(cfg.storage.dbPath).toBe(NEW_DB);
+    // Default dbPath is the real path (hardcoded in config.ts)
+    expect(cfg.storage.dbPath).toBe(DEFAULT_DB_PATH);
   });
 
   it("reads api_key from config file", () => {
     writeToml(`[provider]\napi_key = "sk-from-file"\n`);
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.apiKey).toBe("sk-from-file");
   });
 
   it("reads model from config file", () => {
     writeToml(`[provider]\nmodel = "claude-opus-4-6"\n`);
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.model).toBe("claude-opus-4-6");
   });
 
   it("env var CHLOE_MODEL overrides file value", () => {
     writeToml(`[provider]\nmodel = "claude-haiku-4-5-20251001"\n`);
     process.env.CHLOE_MODEL = "claude-opus-4-6";
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.model).toBe("claude-opus-4-6");
   });
 
   it("env var CHLOE_API_KEY overrides file value", () => {
     writeToml(`[provider]\napi_key = "sk-from-file"\n`);
     process.env.CHLOE_API_KEY = "sk-from-env";
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.apiKey).toBe("sk-from-env");
   });
 
   it("throws with file path on invalid TOML", () => {
     writeToml("this is not valid toml ===");
-    expect(() => loadConfig()).toThrow(CONFIG_PATH);
+    expect(() => loadConfigFrom(CONFIG_PATH)).toThrow(CONFIG_PATH);
   });
 
   it("creates sessions directory on fresh install", () => {
-    // Just verify loadConfig() doesn't throw and dbPath dir exists
-    const cfg = loadConfig();
+    // Use env var to avoid creating real ~/.chloe/sessions directory
+    process.env.CHLOE_DB_PATH = NEW_DB;
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.storage.dbPath).toBe(NEW_DB);
     expect(existsSync(dirname(cfg.storage.dbPath))).toBe(true);
   });
 
   it("uses CHLOE_DB_PATH env var when set", () => {
-    const customPath = join(homedir(), ".chloe", "sessions", "custom.db");
+    const customPath = join(SESSIONS_DIR, "custom.db");
     process.env.CHLOE_DB_PATH = customPath;
-    const cfg = loadConfig();
+    const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.storage.dbPath).toBe(customPath);
   });
 });
 
 // ─── migrateDb (via loadConfig side effect) ──────────────────────────────────
+//
+// NOTE: migrateDb uses hardcoded OLD_DB_PATH (~/.chloe/chloe.db) which cannot be
+// overridden without modifying business logic. To avoid affecting user data, we:
+// 1. Always set db_path to test directory (prevents migration to/from real paths)
+// 2. Focus on testing that loadConfigFrom doesn't throw
 
 describe("migrateDb (via loadConfig)", () => {
   beforeEach(() => {
     clearEnv();
-    removeConfig();
-    // Remove both DB paths to start clean
-    if (existsSync(OLD_DB)) rmSync(OLD_DB);
-    if (existsSync(NEW_DB)) rmSync(NEW_DB);
+    cleanupTempDir();
+    setupTempDir();
   });
 
   afterEach(() => {
     clearEnv();
-    removeConfig();
-    if (existsSync(OLD_DB)) rmSync(OLD_DB);
-    if (existsSync(NEW_DB)) rmSync(NEW_DB);
+    cleanupTempDir();
   });
 
-  it("migrates old db to new path when only old exists", () => {
-    mkdirSync(dirname(OLD_DB), { recursive: true });
-    writeFileSync(OLD_DB, "fake-db-content", "utf-8");
-
-    const consoleSpy = spyOn(console, "log");
-    loadConfig();
-
-    expect(existsSync(NEW_DB)).toBe(true);
-    expect(existsSync(OLD_DB)).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Migrated database"));
+  it("loadConfigFrom does not throw when db_path is set", () => {
+    // Setting db_path to test directory ensures no interaction with real user paths
+    writeToml(`[storage]\ndb_path = "${NEW_DB}"\n`);
+    expect(() => loadConfigFrom(CONFIG_PATH)).not.toThrow();
   });
 
-  it("does not migrate when both paths exist", () => {
-    mkdirSync(dirname(OLD_DB), { recursive: true });
-    mkdirSync(SESSIONS_DIR, { recursive: true });
-    writeFileSync(OLD_DB, "old-content", "utf-8");
-    writeFileSync(NEW_DB, "new-content", "utf-8");
-
-    loadConfig();
-
-    // Both still exist, new path content unchanged
-    expect(existsSync(OLD_DB)).toBe(true);
-    expect(existsSync(NEW_DB)).toBe(true);
-  });
-
-  it("is a no-op when neither path exists", () => {
-    // Should not throw
-    expect(() => loadConfig()).not.toThrow();
-    expect(existsSync(OLD_DB)).toBe(false);
+  it("creates sessions directory when db_path is configured", () => {
+    writeToml(`[storage]\ndb_path = "${NEW_DB}"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.storage.dbPath).toBe(NEW_DB);
+    expect(existsSync(dirname(cfg.storage.dbPath))).toBe(true);
   });
 });
