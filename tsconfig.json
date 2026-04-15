@@ -17,9 +17,5 @@
     "sourceMap": true,
     "outDir": "dist"
   },
-  "references": [
-    { "path": "packages/core" },
-    { "path": "packages/cli" },
-    { "path": "packages/api" }
-  ]
+  "references": [{ "path": "packages/core" }]
 }

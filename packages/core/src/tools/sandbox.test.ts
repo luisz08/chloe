@@ -68,7 +68,7 @@ describe("validateBashCommand", () => {
   });
 
   it("BUILTIN_COMMANDS contains the 9 expected defaults", () => {
-    const expected = ["ls", "cat", "grep", "find", "echo", "pwd", "wc", "head", "tail"];
+    const expected = ["ls", "cat", "grep", "find", "echo", "pwd", "wc", "head", "tail"] as const;
     for (const cmd of expected) {
       expect(BUILTIN_COMMANDS).toContain(cmd);
     }
