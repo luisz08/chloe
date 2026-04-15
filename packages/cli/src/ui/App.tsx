@@ -182,8 +182,8 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
                   });
                   return result !== "deny";
                 },
+                confirmBashCommand,
               }),
-          confirmBashCommand,
           onUsage: handleUsage,
         });
 
