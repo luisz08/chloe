@@ -22,6 +22,7 @@ export interface AgentCallbacks {
   onToolCall?: (name: string, input: unknown) => void;
   onToolResult?: (name: string, output: string) => void;
   confirmTool?: (name: string, input: unknown) => Promise<boolean>;
+  confirmBashCommand?: (binaryName: string) => Promise<boolean>;
   onUsage?: (usage: TurnUsage) => void;
 }
 

@@ -2,12 +2,12 @@ import { Box, Text, useInput, useStdout } from "ink";
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble.js";
 import { ToolBlock } from "./ToolBlock.js";
-import type { ChatMessage } from "./types.js";
+import type { ChatMessage, ConfirmResult } from "./types.js";
 
 interface ChatViewProps {
   messages: ChatMessage[];
   streamingId: string | null;
-  onToolConfirm: (confirmed: boolean) => void;
+  onToolConfirm: (result: ConfirmResult) => void;
   pendingToolId: string | null;
 }
 
@@ -29,18 +29,21 @@ export function ChatView({ messages, streamingId, onToolConfirm, pendingToolId }
     prevLenRef.current = messages.length;
   }, [messages.length, manualScroll]);
 
-  useInput((_, key) => {
-    if (key.upArrow) {
-      setManualScroll(true);
-      setScrollOffset((o) => Math.min(o + 1, Math.max(0, messages.length - 1)));
-    } else if (key.downArrow) {
-      setScrollOffset((o) => {
-        const next = Math.max(0, o - 1);
-        if (next === 0) setManualScroll(false);
-        return next;
-      });
-    }
-  });
+  useInput(
+    (_, key) => {
+      if (key.upArrow) {
+        setManualScroll(true);
+        setScrollOffset((o) => Math.min(o + 1, Math.max(0, messages.length - 1)));
+      } else if (key.downArrow) {
+        setScrollOffset((o) => {
+          const next = Math.max(0, o - 1);
+          if (next === 0) setManualScroll(false);
+          return next;
+        });
+      }
+    },
+    { isActive: pendingToolId === null },
+  );
 
   if (messages.length === 0) {
     return (

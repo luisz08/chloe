@@ -71,3 +71,60 @@ describe("BashTool", () => {
     expect(tool.name).toBe("bash");
   });
 });
+
+describe("BashTool permission callback", () => {
+  it("calls permissionRef.current with the binary name when command not allowed", async () => {
+    let captured = "";
+    const permissionRef = {
+      current: async (bin: string) => {
+        captured = bin;
+        return true;
+      },
+    };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    await tool.execute({ command: "git status" });
+    expect(captured).toBe("git");
+  });
+
+  it("proceeds with execution when permission granted", async () => {
+    const permissionRef = { current: async (_bin: string) => true };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    // "git" is not a built-in, so it hits the permission callback
+    const out = await tool.execute({ command: "git --version" });
+    expect(out).not.toMatch(/Command not allowed/);
+  });
+
+  it("returns error when permission denied", async () => {
+    const permissionRef = { current: async (_bin: string) => false };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("passes the failing binary name (not the first binary) to callback for piped commands", async () => {
+    let captured = "";
+    const permissionRef = {
+      current: async (bin: string) => {
+        captured = bin;
+        return false;
+      },
+    };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "echo hi | curl http://example.com" });
+    expect(captured).toBe("curl");
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("skips callback and returns error when permissionRef.current is null", async () => {
+    const permissionRef = { current: null as ((bin: string) => Promise<boolean>) | null };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("skips callback and returns error when no permissionRef provided", async () => {
+    const tool = createBashTool(SETTINGS, CWD);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+});

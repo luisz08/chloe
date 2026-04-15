@@ -11,7 +11,9 @@ import {
 import { render } from "ink";
 import React from "react";
 import type { AgentHandle } from "../agent-handle.js";
+import { convertStoredMessages } from "../history.js";
 import { App } from "../ui/App.js";
+import type { ChatMessage } from "../ui/types.js";
 
 interface ChatCommandOptions {
   continue?: boolean;
@@ -85,6 +87,12 @@ export async function chatCommand({
     log.debug("created new session", { session: sessionId, name: sessionName });
   }
 
+  let initialMessages: ChatMessage[] = [];
+  if (continueSession === true || session !== undefined) {
+    const storedMessages = await storage.getMessages(sessionId);
+    initialMessages = convertStoredMessages(storedMessages);
+  }
+
   const coreAgent = createAgent({
     model: cfg.provider.model,
     apiKey: cfg.provider.apiKey,
@@ -104,6 +112,7 @@ export async function chatCommand({
       modelName: cfg.provider.model,
       autoConfirm: yes ?? false,
       agent,
+      initialMessages,
     }),
     { exitOnCtrlC: false },
   );

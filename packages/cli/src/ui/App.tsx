@@ -2,10 +2,11 @@ import type { TurnUsage } from "@chloe/core";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentHandle } from "../agent-handle.js";
+import { BashPermissionBlock } from "./BashPermissionBlock.js";
 import { ChatView } from "./ChatView.js";
 import { InputArea } from "./InputArea.js";
 import { StatusBar } from "./StatusBar.js";
-import type { ChatMessage, TokenUsage, UIStatus } from "./types.js";
+import type { ChatMessage, ConfirmResult, TokenUsage, UIStatus } from "./types.js";
 import { getContextLimit } from "./types.js";
 
 interface AppProps {
@@ -13,13 +14,14 @@ interface AppProps {
   modelName: string;
   autoConfirm: boolean;
   agent: AgentHandle;
+  initialMessages?: ChatMessage[];
 }
 
 function makeId(): string {
   return Math.random().toString(36).slice(2);
 }
 
-export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
+export function App({ sessionId, modelName, autoConfirm, agent, initialMessages }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const contextLimit = getContextLimit(modelName);
@@ -41,23 +43,27 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
     );
   }
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [status, setStatus] = useState<UIStatus>("idle");
   const [exitPrompt, setExitPrompt] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [sessionAllowedTools, setSessionAllowedTools] = useState<Set<string>>(new Set());
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
   });
+  const [pendingBashBinary, setPendingBashBinary] = useState<string | null>(null);
+  const [sessionAllowedBinaries, setSessionAllowedBinaries] = useState<Set<string>>(new Set());
+  const bashPermissionResolveRef = useRef<((allowed: boolean) => void) | null>(null);
 
   // Streaming buffer — accumulate tokens here, flush to state at 16ms intervals
   const streamingIdRef = useRef<string | null>(null);
   const bufferRef = useRef<string>("");
 
   // Tool confirmation promise resolver
-  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const confirmResolveRef = useRef<((result: ConfirmResult) => void) | null>(null);
 
   useEffect(() => {
     if (status !== "streaming") return;
@@ -78,6 +84,31 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
       cacheCreationTokens: prev.cacheCreationTokens + usage.cacheCreationTokens,
     }));
   }, []);
+
+  const confirmBashCommand = useCallback(
+    async (binaryName: string): Promise<boolean> => {
+      if (sessionAllowedBinaries.has(binaryName)) return true;
+      return new Promise<boolean>((resolve) => {
+        bashPermissionResolveRef.current = resolve;
+        setPendingBashBinary(binaryName);
+      });
+    },
+    [sessionAllowedBinaries],
+  );
+
+  const handleBashPermission = useCallback(
+    (result: ConfirmResult) => {
+      const resolve = bashPermissionResolveRef.current;
+      if (resolve === null) return;
+      bashPermissionResolveRef.current = null;
+      if (result === "allow-session" && pendingBashBinary !== null) {
+        setSessionAllowedBinaries((prev) => new Set([...prev, pendingBashBinary]));
+      }
+      setPendingBashBinary(null);
+      resolve(result !== "deny");
+    },
+    [pendingBashBinary],
+  );
 
   const handleSubmit = useCallback(
     async (text: string) => {
@@ -131,7 +162,9 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
                   (m) =>
                     m.role === "tool" &&
                     m.toolName === name &&
-                    (m.state === "confirmed" || m.state === "pending"),
+                    (m.state === "confirmed" ||
+                      m.state === "pending" ||
+                      m.state === "session-allowed"),
                 );
               if (idx === -1) return prev;
               const realIdx = prev.length - 1 - idx;
@@ -143,10 +176,14 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
           ...(autoConfirm
             ? {}
             : {
-                confirmTool: (_name: string, _input: unknown) =>
-                  new Promise<boolean>((resolve) => {
+                confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
+                  if (sessionAllowedTools.has(name)) return true;
+                  const result = await new Promise<ConfirmResult>((resolve) => {
                     confirmResolveRef.current = resolve;
-                  }),
+                  });
+                  return result !== "deny";
+                },
+                confirmBashCommand,
               }),
           onUsage: handleUsage,
         });
@@ -171,26 +208,41 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
         setStatus("idle");
       }
     },
-    [status, sessionId, agent, autoConfirm, handleUsage],
+    [status, sessionId, agent, autoConfirm, handleUsage, sessionAllowedTools, confirmBashCommand],
   );
 
-  const handleToolConfirm = useCallback((confirmed: boolean) => {
-    const resolve = confirmResolveRef.current;
-    if (resolve === null) return;
-    confirmResolveRef.current = null;
-    const toolId = makeId();
-    setMessages((prev) => {
-      const idx = [...prev].reverse().findIndex((m) => m.role === "tool" && m.state === "pending");
-      if (idx === -1) return prev;
-      const realIdx = prev.length - 1 - idx;
-      return prev.map((m, i) =>
-        i === realIdx ? { ...m, state: confirmed ? "confirmed" : "denied" } : m,
-      );
-    });
-    // Suppress unused variable warning — toolId used as side-effect marker
-    void toolId;
-    resolve(confirmed);
-  }, []);
+  const handleToolConfirm = useCallback(
+    (result: ConfirmResult) => {
+      const resolve = confirmResolveRef.current;
+      if (resolve === null) return;
+      confirmResolveRef.current = null;
+
+      if (result === "allow-session") {
+        const pending = messages.find((m) => m.role === "tool" && m.state === "pending");
+        if (pending?.toolName) {
+          setSessionAllowedTools((s) => new Set([...s, pending.toolName as string]));
+        }
+      }
+
+      setMessages((prev) => {
+        const idx = [...prev]
+          .reverse()
+          .findIndex((m) => m.role === "tool" && m.state === "pending");
+        if (idx === -1) return prev;
+        const realIdx = prev.length - 1 - idx;
+        const newState: import("./types.js").MessageState =
+          result === "allow-once"
+            ? "confirmed"
+            : result === "allow-session"
+              ? "session-allowed"
+              : "denied";
+        return prev.map((m, i) => (i === realIdx ? { ...m, state: newState } : m));
+      });
+
+      resolve(result);
+    },
+    [messages],
+  );
 
   // Double Ctrl+C exit
   const lastCtrlCRef = useRef<number>(0);
@@ -220,11 +272,16 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
         onToolConfirm={handleToolConfirm}
         pendingToolId={pendingToolMessage?.id ?? null}
       />
+      {pendingBashBinary !== null && (
+        <BashPermissionBlock binaryName={pendingBashBinary} onResult={handleBashPermission} />
+      )}
       <InputArea
         value={inputValue}
         onChange={setInputValue}
         onSubmit={handleSubmit}
-        disabled={status !== "idle" || pendingToolMessage !== undefined}
+        disabled={
+          status !== "idle" || pendingToolMessage !== undefined || pendingBashBinary !== null
+        }
         exitPrompt={exitPrompt}
       />
       <StatusBar

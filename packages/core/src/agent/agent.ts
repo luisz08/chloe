@@ -10,15 +10,21 @@ export class Agent {
   private readonly client: Anthropic;
   private readonly config: AgentConfig;
   private readonly registry: ToolRegistry;
+  private readonly bashPermissionRef: { current: ((bin: string) => Promise<boolean>) | null };
 
   constructor(config: AgentConfig) {
     this.config = config;
     this.client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.registry = new ToolRegistry();
+    this.bashPermissionRef = { current: null };
     const tools =
       config.tools !== undefined
         ? config.tools
-        : createDefaultTools(loadToolSettings(process.cwd()), process.cwd());
+        : createDefaultTools(
+            loadToolSettings(process.cwd()),
+            process.cwd(),
+            this.bashPermissionRef,
+          );
     for (const tool of tools) {
       this.registry.register(tool);
     }
@@ -35,6 +41,7 @@ export class Agent {
 
     log.info("run started", { session: sessionId, model });
 
+    this.bashPermissionRef.current = callbacks.confirmBashCommand ?? null;
     try {
       // Ensure session exists
       let session = await storage.getSession(sessionId);
@@ -75,6 +82,8 @@ export class Agent {
       const error = err instanceof Error ? err.message : String(err);
       log.error("run failed", { session: sessionId, error });
       throw err;
+    } finally {
+      this.bashPermissionRef.current = null;
     }
   }
 }
