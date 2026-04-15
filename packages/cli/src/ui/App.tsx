@@ -146,8 +146,8 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
           ...(autoConfirm
             ? {}
             : {
-                confirmTool: async (_name: string, _input: unknown): Promise<boolean> => {
-                  if (sessionAllowedTools.has(_name)) return true;
+                confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
+                  if (sessionAllowedTools.has(name)) return true;
                   const result = await new Promise<ConfirmResult>((resolve) => {
                     confirmResolveRef.current = resolve;
                   });
