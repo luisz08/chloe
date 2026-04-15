@@ -14,13 +14,14 @@ interface AppProps {
   modelName: string;
   autoConfirm: boolean;
   agent: AgentHandle;
+  initialMessages?: ChatMessage[];
 }
 
 function makeId(): string {
   return Math.random().toString(36).slice(2);
 }
 
-export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
+export function App({ sessionId, modelName, autoConfirm, agent, initialMessages }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const contextLimit = getContextLimit(modelName);
@@ -42,7 +43,7 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
     );
   }
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [status, setStatus] = useState<UIStatus>("idle");
   const [exitPrompt, setExitPrompt] = useState(false);
   const [inputValue, setInputValue] = useState("");
