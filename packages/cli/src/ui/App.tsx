@@ -21,6 +21,8 @@ function makeId(): string {
   return Math.random().toString(36).slice(2);
 }
 
+const BASH_TOOL_NAME = "bash";
+
 export function App({ sessionId, modelName, autoConfirm, agent, initialMessages }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -150,7 +152,7 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
               toolName: name,
               toolInput: input,
               content: "",
-              state: autoConfirm || name === "bash" ? "confirmed" : "pending",
+              state: autoConfirm || name === BASH_TOOL_NAME ? "confirmed" : "pending",
             };
             setMessages((prev) => [...prev, toolMsg]);
           },
@@ -177,7 +179,7 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
             ? {}
             : {
                 confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
-                  if (name === "bash") return true;
+                  if (name === BASH_TOOL_NAME) return true;
                   if (sessionAllowedTools.has(name)) return true;
                   const result = await new Promise<ConfirmResult>((resolve) => {
                     confirmResolveRef.current = resolve;
