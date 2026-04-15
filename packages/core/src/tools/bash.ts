@@ -45,11 +45,17 @@ export function createBashTool(
       if (sandboxErr !== null) {
         const callback = permissionRef?.current ?? null;
         if (callback !== null) {
-          const firstToken = command.trim().split(/\s+/)[0] ?? "";
-          const binaryName = firstToken.split("/").at(-1) ?? firstToken;
-          const allowed = await callback(binaryName);
-          if (!allowed) return sandboxErr;
-          // allowed === true: fall through to execute
+          // Extract binary name from the sandboxErr message:
+          // format: "Command not allowed: <name> is not in the allowed commands list"
+          const match = sandboxErr.match(/^Command not allowed: (\S+)/);
+          const binaryName = match?.[1] ?? "";
+          if (binaryName !== "") {
+            const allowed = await callback(binaryName);
+            if (!allowed) return sandboxErr;
+            // allowed === true: fall through to execute
+          } else {
+            return sandboxErr;
+          }
         } else {
           return sandboxErr;
         }

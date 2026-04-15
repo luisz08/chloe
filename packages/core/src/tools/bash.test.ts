@@ -89,17 +89,29 @@ describe("BashTool permission callback", () => {
   it("proceeds with execution when permission granted", async () => {
     const permissionRef = { current: async (_bin: string) => true };
     const tool = createBashTool(SETTINGS, CWD, permissionRef);
-    // "git" is not a built-in, but with permission=true it should not get the "not allowed" error
-    // We use a command that will actually run if permitted
-    const out = await tool.execute({ command: "echo permgranted" });
+    // "git" is not a built-in, so it hits the permission callback
+    const out = await tool.execute({ command: "git --version" });
     expect(out).not.toMatch(/Command not allowed/);
-    expect(out).toContain("permgranted");
   });
 
   it("returns error when permission denied", async () => {
     const permissionRef = { current: async (_bin: string) => false };
     const tool = createBashTool(SETTINGS, CWD, permissionRef);
     const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("passes the failing binary name (not the first binary) to callback for piped commands", async () => {
+    let captured = "";
+    const permissionRef = {
+      current: async (bin: string) => {
+        captured = bin;
+        return false;
+      },
+    };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "echo hi | curl http://example.com" });
+    expect(captured).toBe("curl");
     expect(out).toMatch(/Command not allowed: curl/);
   });
 
