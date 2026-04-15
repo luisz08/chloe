@@ -2,6 +2,7 @@ import type { TurnUsage } from "@chloe/core";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentHandle } from "../agent-handle.js";
+import { BashPermissionBlock } from "./BashPermissionBlock.js";
 import { ChatView } from "./ChatView.js";
 import { InputArea } from "./InputArea.js";
 import { StatusBar } from "./StatusBar.js";
@@ -52,6 +53,9 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
   });
+  const [pendingBashBinary, setPendingBashBinary] = useState<string | null>(null);
+  const [sessionAllowedBinaries, setSessionAllowedBinaries] = useState<Set<string>>(new Set());
+  const bashPermissionResolveRef = useRef<((allowed: boolean) => void) | null>(null);
 
   // Streaming buffer — accumulate tokens here, flush to state at 16ms intervals
   const streamingIdRef = useRef<string | null>(null);
@@ -79,6 +83,31 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
       cacheCreationTokens: prev.cacheCreationTokens + usage.cacheCreationTokens,
     }));
   }, []);
+
+  const confirmBashCommand = useCallback(
+    async (binaryName: string): Promise<boolean> => {
+      if (sessionAllowedBinaries.has(binaryName)) return true;
+      return new Promise<boolean>((resolve) => {
+        bashPermissionResolveRef.current = resolve;
+        setPendingBashBinary(binaryName);
+      });
+    },
+    [sessionAllowedBinaries],
+  );
+
+  const handleBashPermission = useCallback(
+    (result: ConfirmResult) => {
+      const resolve = bashPermissionResolveRef.current;
+      if (resolve === null) return;
+      bashPermissionResolveRef.current = null;
+      if (result === "allow-session" && pendingBashBinary !== null) {
+        setSessionAllowedBinaries((prev) => new Set([...prev, pendingBashBinary]));
+      }
+      setPendingBashBinary(null);
+      resolve(result !== "deny");
+    },
+    [pendingBashBinary],
+  );
 
   const handleSubmit = useCallback(
     async (text: string) => {
@@ -154,6 +183,7 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
                   return result !== "deny";
                 },
               }),
+          confirmBashCommand,
           onUsage: handleUsage,
         });
 
@@ -177,7 +207,7 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
         setStatus("idle");
       }
     },
-    [status, sessionId, agent, autoConfirm, handleUsage, sessionAllowedTools],
+    [status, sessionId, agent, autoConfirm, handleUsage, sessionAllowedTools, confirmBashCommand],
   );
 
   const handleToolConfirm = useCallback(
@@ -241,11 +271,16 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
         onToolConfirm={handleToolConfirm}
         pendingToolId={pendingToolMessage?.id ?? null}
       />
+      {pendingBashBinary !== null && (
+        <BashPermissionBlock binaryName={pendingBashBinary} onResult={handleBashPermission} />
+      )}
       <InputArea
         value={inputValue}
         onChange={setInputValue}
         onSubmit={handleSubmit}
-        disabled={status !== "idle" || pendingToolMessage !== undefined}
+        disabled={
+          status !== "idle" || pendingToolMessage !== undefined || pendingBashBinary !== null
+        }
         exitPrompt={exitPrompt}
       />
       <StatusBar
