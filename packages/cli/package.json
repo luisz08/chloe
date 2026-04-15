@@ -7,6 +7,12 @@
     "chloe": "./src/index.ts"
   },
   "dependencies": {
-    "@chloe/core": "workspace:*"
+    "@chloe/core": "workspace:*",
+    "ink": "^6.7.0",
+    "ink-scroll-view": "^0.3.6",
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14"
   }
 }

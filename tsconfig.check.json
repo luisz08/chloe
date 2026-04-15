@@ -5,6 +5,7 @@
     "declaration": false,
     "declarationMap": false,
     "rootDir": ".",
+    "jsx": "react-jsx",
     "paths": {
       "@chloe/core": ["./packages/core/src/index.ts"]
     }

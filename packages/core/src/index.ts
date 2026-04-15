@@ -22,7 +22,7 @@ export type { LogLevel, Logger, LogSink } from "./logger/index.js";
 
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";
-export type { AgentCallbacks, AgentConfig, RunResult } from "./agent/types.js";
+export type { AgentCallbacks, AgentConfig, RunResult, TurnUsage } from "./agent/types.js";
 
 // Storage
 export type { StorageAdapter } from "./storage/adapter.js";

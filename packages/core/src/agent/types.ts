@@ -10,11 +10,19 @@ export interface AgentConfig {
   storage: StorageAdapter;
 }
 
+export interface TurnUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface AgentCallbacks {
   onToken?: (text: string) => void;
   onToolCall?: (name: string, input: unknown) => void;
   onToolResult?: (name: string, output: string) => void;
   confirmTool?: (name: string, input: unknown) => Promise<boolean>;
+  onUsage?: (usage: TurnUsage) => void;
 }
 
 export interface RunResult {

@@ -5,7 +5,8 @@
     "outDir": "dist",
     "composite": false,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "jsx": "react-jsx"
   },
   "include": ["src/**/*"],
   "references": [{ "path": "../core" }]

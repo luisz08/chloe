@@ -38,6 +38,13 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 
     const finalMessage = await stream.finalMessage();
 
+    callbacks.onUsage?.({
+      inputTokens: finalMessage.usage.input_tokens,
+      outputTokens: finalMessage.usage.output_tokens,
+      cacheReadTokens: finalMessage.usage.cache_read_input_tokens ?? 0,
+      cacheCreationTokens: finalMessage.usage.cache_creation_input_tokens ?? 0,
+    });
+
     // Build the assistant message from the final message content
     const assistantContent: Array<TextBlock | ToolUseBlock> = [];
     for (const block of finalMessage.content) {
