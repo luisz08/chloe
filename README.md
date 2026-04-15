@@ -9,12 +9,18 @@ A personal AI assistant built with Bun and TypeScript. Features a ReAct loop wit
 
 ## Configuration
 
-| Variable | Required | Default | Description |
+Config is stored at `~/.chloe/settings/config.toml` (created by `chloe config init`). Environment variables take precedence over the file.
+
+| Variable | Config key | Default | Description |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key |
-| `ANTHROPIC_MODEL` | No | `claude-sonnet-4-6` | Model to use |
-| `CHLOE_DB_PATH` | No | `~/.chloe/chloe.db` | Path to the SQLite database |
-| `PORT` | No | `3000` | API server port (overridden by `--port`) |
+| `CHLOE_API_KEY` | `provider.api_key` | — | Anthropic API key (required) |
+| `CHLOE_MODEL` | `provider.model` | `claude-sonnet-4-6` | Model to use |
+| `CHLOE_PROVIDER` | `provider.name` | `anthropic` | Provider name |
+| `CHLOE_BASE_URL` | `provider.base_url` | — | Custom API base URL |
+| `CHLOE_DB_PATH` | `storage.db_path` | `~/.chloe/sessions/chloe.db` | SQLite database path |
+| `CHLOE_LOG_DIR` | `logging.log_dir` | `./logs` | Log output directory |
+| `CHLOE_LOG_LEVEL` | `logging.level` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+| `PORT` | — | `3000` | API server port (overridden by `--port`) |
 
 ## Development
 
@@ -48,12 +54,35 @@ Or install globally:
 bun link packages/cli
 ```
 
+#### Config
+
+Set up the config file interactively:
+
+```bash
+chloe config init
+```
+
+View the current effective configuration (with source annotations):
+
+```bash
+chloe config show
+```
+
+Get or set individual keys:
+
+```bash
+chloe config get provider.model
+chloe config set provider.model claude-opus-4-6
+```
+
+Valid keys: `provider.api_key`, `provider.name`, `provider.model`, `provider.base_url`, `storage.db_path`.
+
 #### Chat
 
 Start or resume a named session:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... chloe chat --session my-session
+CHLOE_API_KEY=sk-ant-... chloe chat --session my-session
 ```
 
 The session name is converted to a URL-safe slug and stored persistently. Re-running with the same `--session` name restores prior conversation history.
@@ -81,8 +110,8 @@ chloe sessions delete <session-id>
 Start the HTTP/SSE API server:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... chloe serve
-ANTHROPIC_API_KEY=sk-ant-... chloe serve --port 8080
+CHLOE_API_KEY=sk-ant-... chloe serve
+CHLOE_API_KEY=sk-ant-... chloe serve --port 8080
 ```
 
 ### API
