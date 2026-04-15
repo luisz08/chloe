@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { ChatMessage, TokenUsage } from "../types.js";
-import { getContextLimit } from "../types.js";
+import type { ChatMessage, TokenUsage } from "./types.js";
+import { getContextLimit } from "./types.js";
 
 describe("getContextLimit", () => {
   it("returns 200_000 for claude-sonnet-4-6", () => {

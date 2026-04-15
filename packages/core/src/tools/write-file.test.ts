@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { ToolSettings } from "../../src/tools/settings.js";
-import { createWriteFileTool } from "../../src/tools/write-file.js";
+import type { ToolSettings } from "./settings.js";
+import { createWriteFileTool } from "./write-file.js";
 
 const TMP = join(import.meta.dir, "__fixtures_wf__");
 const SETTINGS: ToolSettings = {

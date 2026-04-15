@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { DEFAULT_TOOL_SETTINGS, createDefaultTools } from "../../src/tools/index.js";
+import { DEFAULT_TOOL_SETTINGS, createDefaultTools } from "./index.js";
 
 describe("createDefaultTools", () => {
   const cwd = process.cwd();

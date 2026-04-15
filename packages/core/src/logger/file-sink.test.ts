@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FileSink } from "../../src/logger/file-sink.js";
+import { FileSink } from "./file-sink.js";
 
 const TMP = join(import.meta.dir, "__tmp_filesink__");
 

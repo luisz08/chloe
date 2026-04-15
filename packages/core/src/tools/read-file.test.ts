@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createReadFileTool } from "../../src/tools/read-file.js";
-import type { ToolSettings } from "../../src/tools/settings.js";
+import { createReadFileTool } from "./read-file.js";
+import type { ToolSettings } from "./settings.js";
 
 const TMP = join(import.meta.dir, "__fixtures_rf__");
 const SETTINGS: ToolSettings = {

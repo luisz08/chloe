@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createBashTool } from "../../src/tools/bash.js";
-import type { ToolSettings } from "../../src/tools/settings.js";
+import { createBashTool } from "./bash.js";
+import type { ToolSettings } from "./settings.js";
 
 const CWD = process.cwd();
 const SETTINGS: ToolSettings = {

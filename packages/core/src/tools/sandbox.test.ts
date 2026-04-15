@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BUILTIN_COMMANDS, validateBashCommand, validatePath } from "../../src/tools/sandbox.js";
+import { BUILTIN_COMMANDS, validateBashCommand, validatePath } from "./sandbox.js";
 
 const CWD = "/project";
 const ALLOWED = ["/project", "/data/shared"];

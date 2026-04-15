@@ -15,7 +15,7 @@ afterEach(() => {
 // Re-import fresh each time by resetting module cache via dynamic import
 async function freshLogger() {
   // Bun caches modules — use a workaround: import the module and reset the singleton
-  const mod = await import("../../src/logger/logger.js");
+  const mod = await import("./logger.js");
   mod.resetLogger(); // test-only escape hatch
   return mod;
 }

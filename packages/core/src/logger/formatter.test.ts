@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatLine } from "../../src/logger/formatter.js";
+import { formatLine } from "./formatter.js";
 
 describe("formatLine", () => {
   it("produces a line with ISO UTC timestamp, padded level, component, and message", () => {

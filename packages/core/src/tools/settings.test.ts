@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_TOOL_SETTINGS, loadToolSettings } from "../../src/tools/settings.js";
+import { DEFAULT_TOOL_SETTINGS, loadToolSettings } from "./settings.js";
 
 const TMP = join(import.meta.dir, "__fixtures__");
 

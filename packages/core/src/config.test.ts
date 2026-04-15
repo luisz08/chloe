@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-// We import the internal helpers directly by path since they are not all exported
-// from the package index yet. loadConfigFrom reads from a given path, avoiding
-// touching the real user config.
-import { expandHome, loadConfigFrom, maskSecret } from "../../packages/core/src/config.ts";
+// Import directly from the source file (colocated test)
+import { expandHome, loadConfigFrom, maskSecret } from "./config.js";
 
 // Import the default db path constant for accurate test expectations
 const DEFAULT_DB_PATH = join(homedir(), ".chloe", "sessions", "chloe.db");
@@ -31,6 +29,8 @@ function clearEnv(): void {
     "CHLOE_MODEL",
     "CHLOE_BASE_URL",
     "CHLOE_DB_PATH",
+    "CHLOE_LOG_DIR",
+    "CHLOE_LOG_LEVEL",
   ]) {
     delete process.env[key];
   }
@@ -182,5 +182,67 @@ describe("migrateDb (via loadConfig)", () => {
     const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.storage.dbPath).toBe(NEW_DB);
     expect(existsSync(dirname(cfg.storage.dbPath))).toBe(true);
+  });
+});
+
+// ─── loadConfig — logging config ──────────────────────────────────────────────
+
+describe("loadConfig — logging defaults", () => {
+  beforeEach(() => {
+    clearEnv();
+    cleanupTempDir();
+    setupTempDir();
+  });
+
+  afterEach(() => {
+    clearEnv();
+    cleanupTempDir();
+  });
+
+  it("returns default logging config when no [logging] section in file", () => {
+    writeToml(`[provider]\napi_key = "key"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.level).toBe("info");
+    expect(cfg.logging.maxSizeMb).toBe(10);
+    expect(cfg.logging.maxDays).toBe(7);
+    expect(cfg.logging.logDir).toBe(resolve(process.cwd(), "logs"));
+  });
+
+  it("reads log_dir, level, max_size_mb, max_days from config file", () => {
+    writeToml(
+      `[provider]\napi_key = "key"\n[logging]\nlog_dir = "${TMP_DIR}"\nlevel = "debug"\nmax_size_mb = 5\nmax_days = 3\n`,
+    );
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.logDir).toBe(TMP_DIR);
+    expect(cfg.logging.level).toBe("debug");
+    expect(cfg.logging.maxSizeMb).toBe(5);
+    expect(cfg.logging.maxDays).toBe(3);
+  });
+
+  it("CHLOE_LOG_DIR env var overrides config file", () => {
+    writeToml(`[provider]\napi_key = "key"\n`);
+    process.env.CHLOE_LOG_DIR = TMP_DIR;
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.logDir).toBe(TMP_DIR);
+  });
+
+  it("CHLOE_LOG_LEVEL env var overrides config file", () => {
+    writeToml(`[provider]\napi_key = "key"\n[logging]\nlevel = "info"\n`);
+    process.env.CHLOE_LOG_LEVEL = "warn";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.level).toBe("warn");
+  });
+
+  it("resolves relative log_dir against cwd", () => {
+    writeToml(`[provider]\napi_key = "key"\n[logging]\nlog_dir = "./my-logs"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.logDir).toBe(resolve(process.cwd(), "my-logs"));
+  });
+
+  it("expands ~ in log_dir", () => {
+    writeToml(`[provider]\napi_key = "key"\n[logging]\nlog_dir = "~/.chloe/logs"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.logging.logDir).not.toContain("~");
+    expect(cfg.logging.logDir).toContain(".chloe/logs");
   });
 });
