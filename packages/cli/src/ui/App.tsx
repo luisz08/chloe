@@ -150,7 +150,7 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
               toolName: name,
               toolInput: input,
               content: "",
-              state: autoConfirm ? "confirmed" : "pending",
+              state: autoConfirm || name === "bash" ? "confirmed" : "pending",
             };
             setMessages((prev) => [...prev, toolMsg]);
           },
@@ -177,6 +177,7 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
             ? {}
             : {
                 confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
+                  if (name === "bash") return true;
                   if (sessionAllowedTools.has(name)) return true;
                   const result = await new Promise<ConfirmResult>((resolve) => {
                     confirmResolveRef.current = resolve;
