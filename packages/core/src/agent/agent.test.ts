@@ -40,6 +40,10 @@ function makeMemoryStorage(): StorageAdapter {
     async getSession(id) {
       return sessions.get(id) ?? null;
     },
+    async getLastSession(): Promise<Session | null> {
+      const all = [...sessions.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+      return all[0] ?? null;
+    },
     async listSessions(): Promise<SessionSummary[]> {
       return [...sessions.values()].map((s) => ({
         ...s,

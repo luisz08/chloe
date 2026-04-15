@@ -44,11 +44,14 @@ function parseArgs(): void {
   }
 
   if (subcommand === "chat") {
+    let continueSession = false;
     let session: string | undefined;
     let yes = false;
 
     for (let i = 1; i < args.length; i++) {
-      if (args[i] === "--session" && args[i + 1]) {
+      if (args[i] === "--continue") {
+        continueSession = true;
+      } else if (args[i] === "--session" && args[i + 1]) {
         session = args[i + 1];
         i++;
       } else if (args[i] === "--yes" || args[i] === "-y") {
@@ -56,12 +59,17 @@ function parseArgs(): void {
       }
     }
 
-    if (!session) {
-      console.error("Error: --session <name> is required for chat");
+    // Validate mutual exclusivity
+    if (continueSession && session) {
+      console.error("Error: cannot use both --continue and --session");
       process.exit(1);
     }
 
-    chatCommand({ session, yes }).catch((err) => {
+    chatCommand({
+      continue: continueSession,
+      ...(session !== undefined ? { session } : {}),
+      yes,
+    }).catch((err) => {
       console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     });

@@ -108,4 +108,32 @@ describe("SQLiteStorageAdapter", () => {
     const updated = await adapter.getSession("touch-test");
     expect(updated?.updatedAt).toBeGreaterThanOrEqual(originalUpdatedAt);
   });
+
+  test("getLastSession returns null when no sessions exist", async () => {
+    const adapter = makeAdapter();
+    const result = await adapter.getLastSession();
+    expect(result).toBeNull();
+  });
+
+  test("getLastSession returns session with highest updatedAt", async () => {
+    const adapter = makeAdapter();
+    await adapter.createSession("session-old", "Old Session");
+    await adapter.createSession("session-new", "New Session");
+
+    // Touch session-old to make it more recent
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await adapter.touchSession("session-old");
+
+    const lastSession = await adapter.getLastSession();
+    expect(lastSession?.id).toBe("session-old");
+  });
+
+  test("getLastSession returns the only session when one exists", async () => {
+    const adapter = makeAdapter();
+    await adapter.createSession("only-session", "Only Session");
+
+    const lastSession = await adapter.getLastSession();
+    expect(lastSession?.id).toBe("only-session");
+    expect(lastSession?.name).toBe("Only Session");
+  });
 });

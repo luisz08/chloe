@@ -31,6 +31,8 @@ export { SQLiteStorageAdapter } from "./storage/sqlite.js";
 // Session
 export type { Message, Session, SessionSummary } from "./session/types.js";
 export { slugify, validateSessionId } from "./session/slug.js";
+export { generateSessionId } from "./session/id.js";
+export { formatSessionName } from "./session/name.js";
 
 // Tools
 export { ToolRegistry } from "./tools/registry.js";

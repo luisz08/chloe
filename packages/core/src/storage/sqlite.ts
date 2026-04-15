@@ -93,6 +93,15 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     return row ? rowToSession(row) : null;
   }
 
+  async getLastSession(): Promise<Session | null> {
+    const row = this.db
+      .prepare<SessionRow, []>(
+        "SELECT id, name, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT 1",
+      )
+      .get();
+    return row ? rowToSession(row) : null;
+  }
+
   async listSessions(): Promise<SessionSummary[]> {
     const rows = this.db
       .prepare<SessionSummaryRow, []>(

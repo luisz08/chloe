@@ -2,10 +2,11 @@ import type { AgentCallbacks } from "@chloe/core";
 import {
   SQLiteStorageAdapter,
   createAgent,
+  formatSessionName,
+  generateSessionId,
   getLogger,
   initLogger,
   loadConfig,
-  slugify,
 } from "@chloe/core";
 import { render } from "ink";
 import React from "react";
@@ -13,17 +14,16 @@ import type { AgentHandle } from "../agent-handle.js";
 import { App } from "../ui/App.js";
 
 interface ChatCommandOptions {
-  session: string;
-  yes: boolean;
+  continue?: boolean;
+  session?: string;
+  yes?: boolean;
 }
 
-export async function chatCommand({ session, yes }: ChatCommandOptions): Promise<void> {
-  const sessionId = slugify(session);
-  if (sessionId === null) {
-    console.error(`Error: invalid session name: '${session}'`);
-    process.exit(1);
-  }
-
+export async function chatCommand({
+  continue: continueSession,
+  session,
+  yes,
+}: ChatCommandOptions): Promise<void> {
   const cfg = loadConfig();
   initLogger(cfg.logging);
   const log = getLogger("cli");
@@ -53,6 +53,38 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
 
   const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 
+  // Resolve session based on mode
+  let sessionId: string;
+  let sessionName: string;
+
+  if (continueSession) {
+    // --continue: resume last session
+    const lastSession = await storage.getLastSession();
+    if (lastSession === null) {
+      console.error("No previous session found. Use 'chloe chat' to start a new session.");
+      process.exit(1);
+    }
+    sessionId = lastSession.id;
+    sessionName = lastSession.name;
+    log.debug("resuming last session", { session: sessionId });
+  } else if (session !== undefined) {
+    // --session <id>: resume specific session
+    const existingSession = await storage.getSession(session);
+    if (existingSession === null) {
+      console.error(`Session '${session}' not found. Use 'chloe chat' to start a new session.`);
+      process.exit(1);
+    }
+    sessionId = existingSession.id;
+    sessionName = existingSession.name;
+    log.debug("resuming specific session", { session: sessionId });
+  } else {
+    // Default: create new session
+    sessionId = generateSessionId();
+    sessionName = formatSessionName();
+    await storage.createSession(sessionId, sessionName);
+    log.debug("created new session", { session: sessionId, name: sessionName });
+  }
+
   const coreAgent = createAgent({
     model: cfg.provider.model,
     apiKey: cfg.provider.apiKey,
@@ -70,7 +102,7 @@ export async function chatCommand({ session, yes }: ChatCommandOptions): Promise
     React.createElement(App, {
       sessionId,
       modelName: cfg.provider.model,
-      autoConfirm: yes,
+      autoConfirm: yes ?? false,
       agent,
     }),
     { exitOnCtrlC: false },
