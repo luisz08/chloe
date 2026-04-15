@@ -5,7 +5,7 @@ import type { AgentHandle } from "../agent-handle.js";
 import { ChatView } from "./ChatView.js";
 import { InputArea } from "./InputArea.js";
 import { StatusBar } from "./StatusBar.js";
-import type { ChatMessage, TokenUsage, UIStatus } from "./types.js";
+import type { ChatMessage, ConfirmResult, TokenUsage, UIStatus } from "./types.js";
 import { getContextLimit } from "./types.js";
 
 interface AppProps {
@@ -45,6 +45,7 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
   const [status, setStatus] = useState<UIStatus>("idle");
   const [exitPrompt, setExitPrompt] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [sessionAllowedTools, setSessionAllowedTools] = useState<Set<string>>(new Set());
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({
     inputTokens: 0,
     outputTokens: 0,
@@ -57,7 +58,7 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
   const bufferRef = useRef<string>("");
 
   // Tool confirmation promise resolver
-  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const confirmResolveRef = useRef<((result: ConfirmResult) => void) | null>(null);
 
   useEffect(() => {
     if (status !== "streaming") return;
@@ -131,7 +132,9 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
                   (m) =>
                     m.role === "tool" &&
                     m.toolName === name &&
-                    (m.state === "confirmed" || m.state === "pending"),
+                    (m.state === "confirmed" ||
+                      m.state === "pending" ||
+                      m.state === "session-allowed"),
                 );
               if (idx === -1) return prev;
               const realIdx = prev.length - 1 - idx;
@@ -143,10 +146,13 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
           ...(autoConfirm
             ? {}
             : {
-                confirmTool: (_name: string, _input: unknown) =>
-                  new Promise<boolean>((resolve) => {
+                confirmTool: async (_name: string, _input: unknown): Promise<boolean> => {
+                  if (sessionAllowedTools.has(_name)) return true;
+                  const result = await new Promise<ConfirmResult>((resolve) => {
                     confirmResolveRef.current = resolve;
-                  }),
+                  });
+                  return result !== "deny";
+                },
               }),
           onUsage: handleUsage,
         });
@@ -171,26 +177,41 @@ export function App({ sessionId, modelName, autoConfirm, agent }: AppProps) {
         setStatus("idle");
       }
     },
-    [status, sessionId, agent, autoConfirm, handleUsage],
+    [status, sessionId, agent, autoConfirm, handleUsage, sessionAllowedTools],
   );
 
-  const handleToolConfirm = useCallback((confirmed: boolean) => {
-    const resolve = confirmResolveRef.current;
-    if (resolve === null) return;
-    confirmResolveRef.current = null;
-    const toolId = makeId();
-    setMessages((prev) => {
-      const idx = [...prev].reverse().findIndex((m) => m.role === "tool" && m.state === "pending");
-      if (idx === -1) return prev;
-      const realIdx = prev.length - 1 - idx;
-      return prev.map((m, i) =>
-        i === realIdx ? { ...m, state: confirmed ? "confirmed" : "denied" } : m,
-      );
-    });
-    // Suppress unused variable warning — toolId used as side-effect marker
-    void toolId;
-    resolve(confirmed);
-  }, []);
+  const handleToolConfirm = useCallback(
+    (result: ConfirmResult) => {
+      const resolve = confirmResolveRef.current;
+      if (resolve === null) return;
+      confirmResolveRef.current = null;
+
+      if (result === "allow-session") {
+        const pending = messages.find((m) => m.role === "tool" && m.state === "pending");
+        if (pending?.toolName) {
+          setSessionAllowedTools((s) => new Set([...s, pending.toolName as string]));
+        }
+      }
+
+      setMessages((prev) => {
+        const idx = [...prev]
+          .reverse()
+          .findIndex((m) => m.role === "tool" && m.state === "pending");
+        if (idx === -1) return prev;
+        const realIdx = prev.length - 1 - idx;
+        const newState: import("./types.js").MessageState =
+          result === "allow-once"
+            ? "confirmed"
+            : result === "allow-session"
+              ? "session-allowed"
+              : "denied";
+        return prev.map((m, i) => (i === realIdx ? { ...m, state: newState } : m));
+      });
+
+      resolve(result);
+    },
+    [messages],
+  );
 
   // Double Ctrl+C exit
   const lastCtrlCRef = useRef<number>(0);
