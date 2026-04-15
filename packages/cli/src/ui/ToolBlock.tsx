@@ -1,11 +1,18 @@
-import { Box, Text, useInput } from "ink";
-import type { ChatMessage } from "./types.js";
+import { Box, Text } from "ink";
+import { SelectList } from "./SelectList.js";
+import type { ChatMessage, ConfirmResult } from "./types.js";
 
 interface ToolBlockProps {
   message: ChatMessage;
   isPending: boolean;
-  onConfirm: (confirmed: boolean) => void;
+  onConfirm: (result: ConfirmResult) => void;
 }
+
+const CONFIRM_OPTIONS: Array<{ value: ConfirmResult; label: string }> = [
+  { value: "allow-once", label: "Allow once" },
+  { value: "deny", label: "Deny" },
+  { value: "allow-session", label: "Allow in this session" },
+];
 
 function summarizeInput(_toolName: string, input: unknown): string {
   if (input === null || input === undefined || typeof input !== "object") return "";
@@ -22,24 +29,13 @@ function summarizeInput(_toolName: string, input: unknown): string {
 }
 
 export function ToolBlock({ message, isPending, onConfirm }: ToolBlockProps) {
-  useInput(
-    (input) => {
-      if (!isPending) return;
-      if (input === "y" || input === "Y") {
-        onConfirm(true);
-      } else if (input === "n" || input === "N" || input === "\x1b") {
-        onConfirm(false);
-      }
-    },
-    { isActive: isPending },
-  );
+  // Collapsed view when done/denied/session-allowed
+  const isDone =
+    message.state === "done" || message.state === "denied" || message.state === "session-allowed";
 
-  const isDone = message.state === "done" || message.state === "denied";
-
-  // Collapsed view: single summary line once tool has completed
   if (isDone) {
-    const icon = message.state === "done" ? "✓" : "✗";
-    const color = message.state === "done" ? "green" : "red";
+    const icon = message.state === "denied" ? "✗" : "✓";
+    const color = message.state === "denied" ? "red" : "green";
     const hint = summarizeInput(message.toolName ?? "", message.toolInput);
     return (
       <Box marginBottom={0}>
@@ -49,6 +45,12 @@ export function ToolBlock({ message, isPending, onConfirm }: ToolBlockProps) {
         <Text color="gray" dimColor>
           {hint}
         </Text>
+        {message.state === "session-allowed" && (
+          <Text color="gray" dimColor>
+            {" "}
+            (session)
+          </Text>
+        )}
       </Box>
     );
   }
@@ -76,8 +78,8 @@ export function ToolBlock({ message, isPending, onConfirm }: ToolBlockProps) {
           <Text dimColor>{JSON.stringify(message.toolInput, null, 2)}</Text>
         </Box>
       )}
-      <Box marginTop={1}>
-        <Text color="yellow">Confirm? [y/N]: </Text>
+      <Box marginTop={1} paddingLeft={1}>
+        <SelectList options={CONFIRM_OPTIONS} onSelect={onConfirm} isActive={isPending} />
       </Box>
     </Box>
   );

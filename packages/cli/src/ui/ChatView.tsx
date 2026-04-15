@@ -2,12 +2,12 @@ import { Box, Text, useInput, useStdout } from "ink";
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble.js";
 import { ToolBlock } from "./ToolBlock.js";
-import type { ChatMessage } from "./types.js";
+import type { ChatMessage, ConfirmResult } from "./types.js";
 
 interface ChatViewProps {
   messages: ChatMessage[];
   streamingId: string | null;
-  onToolConfirm: (confirmed: boolean) => void;
+  onToolConfirm: (result: ConfirmResult) => void;
   pendingToolId: string | null;
 }
 
