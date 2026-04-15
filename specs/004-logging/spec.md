@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-logging`
 **Created**: 2026-04-14
-**Status**: Draft
+**Status**: Shipped
 **Input**: Add a logging module to `packages/core` that writes structured text logs to rotating files. Designed for extensibility (future sinks: Prometheus, HTTP) but currently implements file logging only. Helps with debugging and issue investigation.
 
 ---
