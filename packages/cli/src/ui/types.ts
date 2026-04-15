@@ -1,8 +1,15 @@
 export type MessageRole = "user" | "assistant" | "tool";
 
-export type MessageState = "complete" | "streaming" | "pending" | "confirmed" | "denied" | "done" | "session-allowed";
+export type MessageState =
+  | "complete"
+  | "streaming"
+  | "pending"
+  | "confirmed"
+  | "denied"
+  | "done"
+  | "session-allowed";
 
-export type ConfirmResult = 'allow-once' | 'deny' | 'allow-session';
+export type ConfirmResult = "allow-once" | "deny" | "allow-session";
 
 export type UIStatus = "idle" | "thinking" | "streaming";
 
