@@ -6,7 +6,11 @@ interface BashInput {
   command: string;
 }
 
-export function createBashTool(settings: ToolSettings, cwd: string): Tool {
+export function createBashTool(
+  settings: ToolSettings,
+  cwd: string,
+  permissionRef?: { current: ((binaryName: string) => Promise<boolean>) | null },
+): Tool {
   return {
     name: "bash",
     description:
@@ -38,7 +42,18 @@ export function createBashTool(settings: ToolSettings, cwd: string): Tool {
         { allowedCommands: settings.bash.allowedCommands, allowedPaths: settings.allowedPaths },
         cwd,
       );
-      if (sandboxErr !== null) return sandboxErr;
+      if (sandboxErr !== null) {
+        const callback = permissionRef?.current ?? null;
+        if (callback !== null) {
+          const firstToken = command.trim().split(/\s+/)[0] ?? "";
+          const binaryName = firstToken.split("/").at(-1) ?? firstToken;
+          const allowed = await callback(binaryName);
+          if (!allowed) return sandboxErr;
+          // allowed === true: fall through to execute
+        } else {
+          return sandboxErr;
+        }
+      }
 
       return new Promise<string>((resolve) => {
         const proc = Bun.spawn(["bash", "-c", command], {

@@ -7,9 +7,13 @@ import { createWriteFileTool } from "./write-file.js";
 export { DEFAULT_TOOL_SETTINGS, loadToolSettings } from "./settings.js";
 export type { ToolSettings } from "./settings.js";
 
-export function createDefaultTools(settings: ToolSettings, cwd: string): Tool[] {
+export function createDefaultTools(
+  settings: ToolSettings,
+  cwd: string,
+  permissionRef?: { current: ((binaryName: string) => Promise<boolean>) | null },
+): Tool[] {
   return [
-    createBashTool(settings, cwd),
+    createBashTool(settings, cwd, permissionRef),
     createReadFileTool(settings, cwd),
     createWriteFileTool(settings, cwd),
   ];

@@ -71,3 +71,48 @@ describe("BashTool", () => {
     expect(tool.name).toBe("bash");
   });
 });
+
+describe("BashTool permission callback", () => {
+  it("calls permissionRef.current with the binary name when command not allowed", async () => {
+    let captured = "";
+    const permissionRef = {
+      current: async (bin: string) => {
+        captured = bin;
+        return true;
+      },
+    };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    await tool.execute({ command: "git status" });
+    expect(captured).toBe("git");
+  });
+
+  it("proceeds with execution when permission granted", async () => {
+    const permissionRef = { current: async (_bin: string) => true };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    // "git" is not a built-in, but with permission=true it should not get the "not allowed" error
+    // We use a command that will actually run if permitted
+    const out = await tool.execute({ command: "echo permgranted" });
+    expect(out).not.toMatch(/Command not allowed/);
+    expect(out).toContain("permgranted");
+  });
+
+  it("returns error when permission denied", async () => {
+    const permissionRef = { current: async (_bin: string) => false };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("skips callback and returns error when permissionRef.current is null", async () => {
+    const permissionRef = { current: null as ((bin: string) => Promise<boolean>) | null };
+    const tool = createBashTool(SETTINGS, CWD, permissionRef);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+
+  it("skips callback and returns error when no permissionRef provided", async () => {
+    const tool = createBashTool(SETTINGS, CWD);
+    const out = await tool.execute({ command: "curl http://example.com" });
+    expect(out).toMatch(/Command not allowed: curl/);
+  });
+});
