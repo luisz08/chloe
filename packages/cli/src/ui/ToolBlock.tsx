@@ -31,7 +31,10 @@ function summarizeInput(_toolName: string, input: unknown): string {
 export function ToolBlock({ message, isPending, onConfirm }: ToolBlockProps) {
   // Collapsed view when done/denied/session-allowed
   const isDone =
-    message.state === "done" || message.state === "denied" || message.state === "session-allowed";
+    message.state === "done" ||
+    message.state === "confirmed" ||
+    message.state === "denied" ||
+    message.state === "session-allowed";
 
   if (isDone) {
     const icon = message.state === "denied" ? "✗" : "✓";
