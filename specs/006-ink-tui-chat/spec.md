@@ -157,10 +157,11 @@ Assistant replies that contain Markdown are rendered with appropriate terminal f
 ## Assumptions
 
 - The Anthropic API response includes a `usage` object with input and output token counts; this is used to populate the status bar without any additional API calls.
-- The model context limit is a static value derivable from the model name at startup (e.g., `claude-sonnet-4-6` → 200,000 tokens); no runtime API call is needed to look it up.
+- The model context limit is a static value derivable from the model name at startup (e.g., `claude-sonnet-4-6` → 200,000 tokens); no runtime API call is needed to look it up. There is no config override for this value.
 - The terminal environment supports standard ANSI colour and box-drawing characters (i.e., the user is on a modern macOS, Linux, or WSL terminal).
-- Markdown rendering fidelity is "reasonable for a terminal" — pixel-perfect HTML rendering is not expected.
+- Markdown rendering fidelity is "reasonable for a terminal" — pixel-perfect HTML rendering is not expected. Visual jitter during streaming Markdown is acceptable.
 - Scroll behaviour follows the most-recent-message-visible convention; manual scroll-up to review history is supported but auto-scroll resumes on new messages.
+- There is no `--no-tui` fallback mode. The ink UI is the only mode for `chloe chat`; non-interactive or CI usage is out of scope.
 
 ---
 

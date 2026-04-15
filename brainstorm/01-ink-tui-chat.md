@@ -43,7 +43,10 @@ Approach A: ink with a layered component architecture. All UI components live in
 
 ## Open Threads
 
-- Should a `--no-tui` escape hatch exist for CI/script/narrow-terminal environments?
-- Is a hardcoded model-name → context-limit map acceptable, or should a config override be supported?
 - Which Markdown rendering library is best compatible with ink + Bun? (deferred to implementation)
-- Is live-streaming Markdown rendering worth the visual jitter, or should buffered rendering be an option?
+
+## Resolved Decisions
+
+- **No `--no-tui` fallback**: CI/script/non-interactive usage is explicitly out of scope.
+- **Static model context limit map**: Hardcoded model-name → context-limit lookup is acceptable; no config override needed.
+- **Streaming Markdown jitter is acceptable**: Live best-effort rendering during streaming is preferred; visual jitter is an acceptable trade-off.
