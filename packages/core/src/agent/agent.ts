@@ -3,12 +3,15 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import { createDefaultTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
-import { runLoop } from "./loop.js";
-import type { AgentCallbacks, AgentConfig, RunResult } from "./types.js";
+import { detectImages, toContentBlocks } from "./image-input.js";
+import { routingRunLoop } from "./loop.js";
+import { resolveModelConfig, selectInitialModel } from "./router.js";
+import type { AgentCallbacks, AgentConfig, ResolvedModelConfig, RunResult } from "./types.js";
 
 export class Agent {
   private readonly client: Anthropic;
   private readonly config: AgentConfig;
+  private readonly modelConfig: ResolvedModelConfig;
   private readonly registry: ToolRegistry;
   private readonly bashPermissionRef: { current: ((bin: string) => Promise<boolean>) | null };
 
@@ -17,6 +20,10 @@ export class Agent {
     this.client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.registry = new ToolRegistry();
     this.bashPermissionRef = { current: null };
+
+    // Create model config from the model string (all models use same default)
+    this.modelConfig = resolveModelConfig({ defaultModel: config.model });
+
     const tools =
       config.tools !== undefined
         ? config.tools
@@ -35,11 +42,19 @@ export class Agent {
     userMessage: string,
     callbacks: AgentCallbacks = {},
   ): Promise<RunResult> {
-    const { storage, model } = this.config;
+    const { storage } = this.config;
     const log = getLogger("agent");
     const startMs = Date.now();
 
-    log.info("run started", { session: sessionId, model });
+    // Detect images in user message
+    const detectedImages = detectImages(userMessage);
+    const imageBlocks = await toContentBlocks(detectedImages);
+    const hasImages = imageBlocks.length > 0;
+
+    // Select initial model based on image detection
+    const initialModel = selectInitialModel(hasImages, this.modelConfig);
+
+    log.info("run started", { session: sessionId, model: initialModel, hasImages });
 
     this.bashPermissionRef.current = callbacks.confirmBashCommand ?? null;
     try {
@@ -56,15 +71,22 @@ export class Agent {
         content: m.content as MessageParam["content"],
       }));
 
-      messages.push({ role: "user", content: userMessage });
+      // Build user message content: text + image blocks if present
+      const userContent: MessageParam["content"] = hasImages
+        ? [{ type: "text", text: userMessage }, ...imageBlocks]
+        : userMessage;
 
-      // Run the ReAct loop
-      const result = await runLoop({
+      messages.push({ role: "user", content: userContent });
+
+      // Run the routing-aware ReAct loop
+      const result = await routingRunLoop({
         messages,
         client: this.client,
-        model,
+        model: initialModel,
         tools: this.registry,
         callbacks,
+        modelConfig: this.modelConfig,
+        hasImages,
       });
 
       // Persist the new messages (user + assistant turns added by the loop)

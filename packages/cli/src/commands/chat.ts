@@ -94,7 +94,7 @@ export async function chatCommand({
   }
 
   const coreAgent = createAgent({
-    model: cfg.provider.model,
+    model: cfg.provider.defaultModel,
     apiKey: cfg.provider.apiKey,
     ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
     storage,
@@ -109,7 +109,7 @@ export async function chatCommand({
   const { waitUntilExit } = render(
     React.createElement(App, {
       sessionId,
-      modelName: cfg.provider.model,
+      modelName: cfg.provider.defaultModel,
       autoConfirm: yes ?? false,
       agent,
       initialMessages,

@@ -26,7 +26,11 @@ function clearEnv(): void {
   for (const key of [
     "CHLOE_API_KEY",
     "CHLOE_PROVIDER",
-    "CHLOE_MODEL",
+    "CHLOE_DEFAULT_MODEL",
+    "CHLOE_REASONING_MODEL",
+    "CHLOE_FAST_MODEL",
+    "CHLOE_VISION_MODEL",
+    "CHLOE_MODEL", // legacy - ignored
     "CHLOE_BASE_URL",
     "CHLOE_DB_PATH",
     "CHLOE_LOG_DIR",
@@ -99,7 +103,10 @@ describe("loadConfig", () => {
     const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.apiKey).toBe("");
     expect(cfg.provider.name).toBe("anthropic");
-    expect(cfg.provider.model).toBe("claude-sonnet-4-6");
+    expect(cfg.provider.defaultModel).toBe("claude-sonnet-4-6");
+    expect(cfg.provider.reasoningModel).toBe("claude-sonnet-4-6"); // fallback
+    expect(cfg.provider.fastModel).toBe("claude-sonnet-4-6"); // fallback
+    expect(cfg.provider.visionModel).toBe("claude-sonnet-4-6"); // fallback
     expect(cfg.provider.baseUrl).toBe("");
     // Default dbPath is the real path (hardcoded in config.ts)
     expect(cfg.storage.dbPath).toBe(DEFAULT_DB_PATH);
@@ -111,17 +118,61 @@ describe("loadConfig", () => {
     expect(cfg.provider.apiKey).toBe("sk-from-file");
   });
 
-  it("reads model from config file", () => {
-    writeToml(`[provider]\nmodel = "claude-opus-4-6"\n`);
+  it("reads default_model from config file", () => {
+    writeToml(`[provider]\ndefault_model = "claude-opus-4-6"\n`);
     const cfg = loadConfigFrom(CONFIG_PATH);
-    expect(cfg.provider.model).toBe("claude-opus-4-6");
+    expect(cfg.provider.defaultModel).toBe("claude-opus-4-6");
   });
 
-  it("env var CHLOE_MODEL overrides file value", () => {
-    writeToml(`[provider]\nmodel = "claude-haiku-4-5-20251001"\n`);
-    process.env.CHLOE_MODEL = "claude-opus-4-6";
+  it("reads reasoning_model from config file with fallback", () => {
+    writeToml(`[provider]\ndefault_model = "claude-sonnet-4-6"\nreasoning_model = "claude-opus-4-6"\n`);
     const cfg = loadConfigFrom(CONFIG_PATH);
-    expect(cfg.provider.model).toBe("claude-opus-4-6");
+    expect(cfg.provider.defaultModel).toBe("claude-sonnet-4-6");
+    expect(cfg.provider.reasoningModel).toBe("claude-opus-4-6");
+  });
+
+  it("reasoning_model falls back to default_model when unset", () => {
+    writeToml(`[provider]\ndefault_model = "claude-sonnet-4-6"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.reasoningModel).toBe("claude-sonnet-4-6"); // fallback
+  });
+
+  it("env var CHLOE_DEFAULT_MODEL overrides file value", () => {
+    writeToml(`[provider]\ndefault_model = "claude-haiku-4-5-20251001"\n`);
+    process.env.CHLOE_DEFAULT_MODEL = "claude-opus-4-6";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.defaultModel).toBe("claude-opus-4-6");
+  });
+
+  it("env var CHLOE_REASONING_MODEL overrides file value", () => {
+    writeToml(`[provider]\nreasoning_model = "claude-sonnet-4-6"\n`);
+    process.env.CHLOE_REASONING_MODEL = "claude-opus-4-6";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.reasoningModel).toBe("claude-opus-4-6");
+  });
+
+  it("env var CHLOE_FAST_MODEL sets fast_model", () => {
+    process.env.CHLOE_FAST_MODEL = "claude-haiku-4-5-20251001";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.fastModel).toBe("claude-haiku-4-5-20251001");
+  });
+
+  it("env var CHLOE_VISION_MODEL sets vision_model", () => {
+    process.env.CHLOE_VISION_MODEL = "claude-sonnet-4-6";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.visionModel).toBe("claude-sonnet-4-6");
+  });
+
+  it("legacy CHLOE_MODEL env var is ignored", () => {
+    process.env.CHLOE_MODEL = "claude-opus-4-6"; // legacy - should be ignored
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.defaultModel).toBe("claude-sonnet-4-6"); // still default
+  });
+
+  it("legacy model field in TOML is ignored", () => {
+    writeToml(`[provider]\nmodel = "claude-opus-4-6"\n`); // legacy - should be ignored
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.provider.defaultModel).toBe("claude-sonnet-4-6"); // still default
   });
 
   it("env var CHLOE_API_KEY overrides file value", () => {

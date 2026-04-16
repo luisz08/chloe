@@ -15,7 +15,10 @@ import {
 const VALID_KEYS = [
   "provider.api_key",
   "provider.name",
-  "provider.model",
+  "provider.default_model",
+  "provider.reasoning_model",
+  "provider.fast_model",
+  "provider.vision_model",
   "provider.base_url",
   "storage.db_path",
 ] as const;
@@ -50,8 +53,14 @@ function getEffectiveValue(key: ValidKey, cfg: ChloeConfig): string {
       return cfg.provider.apiKey;
     case "provider.name":
       return cfg.provider.name;
-    case "provider.model":
-      return cfg.provider.model;
+    case "provider.default_model":
+      return cfg.provider.defaultModel;
+    case "provider.reasoning_model":
+      return cfg.provider.reasoningModel;
+    case "provider.fast_model":
+      return cfg.provider.fastModel;
+    case "provider.vision_model":
+      return cfg.provider.visionModel;
     case "provider.base_url":
       return cfg.provider.baseUrl;
     case "storage.db_path":
@@ -62,7 +71,10 @@ function getEffectiveValue(key: ValidKey, cfg: ChloeConfig): string {
 const ENV_MAP: Record<ValidKey, string> = {
   "provider.api_key": "CHLOE_API_KEY",
   "provider.name": "CHLOE_PROVIDER",
-  "provider.model": "CHLOE_MODEL",
+  "provider.default_model": "CHLOE_DEFAULT_MODEL",
+  "provider.reasoning_model": "CHLOE_REASONING_MODEL",
+  "provider.fast_model": "CHLOE_FAST_MODEL",
+  "provider.vision_model": "CHLOE_VISION_MODEL",
   "provider.base_url": "CHLOE_BASE_URL",
   "storage.db_path": "CHLOE_DB_PATH",
 };
@@ -98,11 +110,22 @@ async function cmdInit(): Promise<void> {
     process.exit(1);
   }
 
-  const model = await ask("Model", "claude-sonnet-4-6");
+  const defaultModel = await ask("Default Model", "claude-sonnet-4-6");
+  const reasoningModel = await ask("Reasoning Model (optional, leave blank to use default)", "");
+  const fastModel = await ask("Fast Model (optional, leave blank to use default)", "");
+  const visionModel = await ask("Vision Model (optional, leave blank to use default)", "");
   const baseUrl = await ask("Base URL (optional, leave blank for default Anthropic endpoint)");
 
   const cfg: ChloeConfig = {
-    provider: { apiKey, name: "anthropic", model, baseUrl },
+    provider: {
+      apiKey,
+      name: "anthropic",
+      defaultModel,
+      reasoningModel: reasoningModel || defaultModel,
+      fastModel: fastModel || defaultModel,
+      visionModel: visionModel || defaultModel,
+      baseUrl,
+    },
     storage: { dbPath: "" },
     logging: { logDir: "", level: "info", maxSizeMb: 10, maxDays: 7 },
   };

@@ -7,7 +7,10 @@ import type { LoggingConfig } from "./logger/types.js";
 export interface ProviderConfig {
   apiKey: string;
   name: string;
-  model: string;
+  defaultModel: string;
+  reasoningModel: string;
+  fastModel: string;
+  visionModel: string;
   baseUrl: string;
 }
 
@@ -30,7 +33,7 @@ const DEFAULT_DB_PATH = join(homedir(), ".chloe", "sessions", "chloe.db");
 
 const DEFAULTS = {
   providerName: "anthropic",
-  model: "claude-sonnet-4-6",
+  defaultModel: "claude-sonnet-4-6",
   baseUrl: "",
   logLevel: "info",
   logMaxSizeMb: 10,
@@ -103,8 +106,16 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
   // Only non-empty env vars win; empty string falls through to file/default
   const apiKey = process.env.CHLOE_API_KEY || str(fileProvider.api_key);
   const name = process.env.CHLOE_PROVIDER || str(fileProvider.name) || DEFAULTS.providerName;
-  const model = process.env.CHLOE_MODEL || str(fileProvider.model) || DEFAULTS.model;
   const baseUrl = process.env.CHLOE_BASE_URL ?? str(fileProvider.base_url);
+
+  // Model config with fallback logic
+  const defaultModel =
+    process.env.CHLOE_DEFAULT_MODEL || str(fileProvider.default_model) || DEFAULTS.defaultModel;
+  const reasoningModel =
+    process.env.CHLOE_REASONING_MODEL || str(fileProvider.reasoning_model) || defaultModel; // fallback to defaultModel
+  const fastModel = process.env.CHLOE_FAST_MODEL || str(fileProvider.fast_model) || defaultModel; // fallback to defaultModel
+  const visionModel =
+    process.env.CHLOE_VISION_MODEL || str(fileProvider.vision_model) || defaultModel; // fallback to defaultModel
 
   const rawDbPath = process.env.CHLOE_DB_PATH || str(fileStorage.db_path) || DEFAULT_DB_PATH;
   const dbPath = expandHome(rawDbPath);
@@ -125,7 +136,15 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
   migrateDb(dbPath);
 
   return {
-    provider: { apiKey, name, model, baseUrl },
+    provider: {
+      apiKey,
+      name,
+      defaultModel,
+      reasoningModel,
+      fastModel,
+      visionModel,
+      baseUrl,
+    },
     storage: { dbPath },
     logging: { logDir, level: logLevel, maxSizeMb, maxDays },
   };
@@ -140,7 +159,10 @@ export interface RawFileConfig {
   provider: {
     api_key: string;
     name: string;
-    model: string;
+    default_model: string;
+    reasoning_model: string;
+    fast_model: string;
+    vision_model: string;
     base_url: string;
   };
   storage: {
@@ -158,7 +180,10 @@ export function readFileConfig(): RawFileConfig | null {
     provider: {
       api_key: str(p.api_key),
       name: str(p.name),
-      model: str(p.model),
+      default_model: str(p.default_model),
+      reasoning_model: str(p.reasoning_model),
+      fast_model: str(p.fast_model),
+      vision_model: str(p.vision_model),
       base_url: str(p.base_url),
     },
     storage: { db_path: str(s.db_path) },
@@ -170,13 +195,24 @@ export function setConfigInFile(
   key:
     | "provider.api_key"
     | "provider.name"
-    | "provider.model"
+    | "provider.default_model"
+    | "provider.reasoning_model"
+    | "provider.fast_model"
+    | "provider.vision_model"
     | "provider.base_url"
     | "storage.db_path",
   value: string,
 ): void {
   const current = readFileConfig() ?? {
-    provider: { api_key: "", name: "", model: "", base_url: "" },
+    provider: {
+      api_key: "",
+      name: "",
+      default_model: "",
+      reasoning_model: "",
+      fast_model: "",
+      vision_model: "",
+      base_url: "",
+    },
     storage: { db_path: "" },
   };
 
@@ -187,8 +223,17 @@ export function setConfigInFile(
     case "provider.name":
       current.provider.name = value;
       break;
-    case "provider.model":
-      current.provider.model = value;
+    case "provider.default_model":
+      current.provider.default_model = value;
+      break;
+    case "provider.reasoning_model":
+      current.provider.reasoning_model = value;
+      break;
+    case "provider.fast_model":
+      current.provider.fast_model = value;
+      break;
+    case "provider.vision_model":
+      current.provider.vision_model = value;
       break;
     case "provider.base_url":
       current.provider.base_url = value;
@@ -216,7 +261,10 @@ export function writeConfig(config: ChloeConfig): void {
     provider: {
       api_key: config.provider.apiKey,
       name: config.provider.name,
-      model: config.provider.model,
+      default_model: config.provider.defaultModel,
+      reasoning_model: config.provider.reasoningModel,
+      fast_model: config.provider.fastModel,
+      vision_model: config.provider.visionModel,
       base_url: config.provider.baseUrl,
     },
     storage: {

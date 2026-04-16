@@ -298,3 +298,103 @@ describe("runLoop", () => {
     expect(result.finalText).toBe("All done.");
   });
 });
+
+// ─── Empty Response Handling Tests ─────────────────────────────────────────────
+//
+// T012a: Tests for empty response handling after route token detection.
+// Scenario: Target model outputs empty content, attempt regeneration.
+
+describe("empty response handling", () => {
+  it("returns empty finalText when model outputs no text", async () => {
+    // Model returns empty text block
+    const emptyMsg: Message = {
+      id: "msg_empty",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "" } as TextBlock],
+      model: "claude-test",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 5 } as Message["usage"],
+    };
+
+    const client = makeMockClient([{ events: makeTextEvents(""), finalMsg: emptyMsg }]);
+
+    const registry = new ToolRegistry();
+    const result = await runLoop({
+      messages: [{ role: "user", content: "Hello" }],
+      client,
+      model: "claude-test",
+      tools: registry,
+      callbacks: {},
+    });
+
+    expect(result.finalText).toBe("");
+  });
+
+  it("handles empty after multiple calls", async () => {
+    // Note: Current runLoop stops on first end_turn, this test documents behavior
+    // In routingRunLoop, empty response after route token triggers regeneration
+    const firstMsg = makeFinalTextMessage("Thinking...");
+    const emptyMsg: Message = {
+      id: "msg_empty",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "" } as TextBlock],
+      model: "claude-test",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 5 } as Message["usage"],
+    };
+
+    const client = makeMockClient([
+      { events: makeTextEvents("Thinking..."), finalMsg: firstMsg },
+      { events: makeTextEvents(""), finalMsg: emptyMsg },
+    ]);
+
+    const registry = new ToolRegistry();
+    const result = await runLoop({
+      messages: [{ role: "user", content: "Hello" }],
+      client,
+      model: "claude-test",
+      tools: registry,
+      callbacks: {},
+    });
+
+    // Current runLoop behavior: stops on first end_turn, doesn't make second call
+    // This test documents the baseline behavior before routingRunLoop implementation
+    expect(result.finalText).toBe("Thinking...");
+  });
+
+  it("preserves previous text when empty response follows", async () => {
+    // Model returns text then empty in subsequent turn
+    const textMsg = makeFinalTextMessage("Initial response");
+    const emptyMsg: Message = {
+      id: "msg_empty",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "" } as TextBlock],
+      model: "claude-test",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 5 } as Message["usage"],
+    };
+
+    const client = makeMockClient([
+      { events: makeTextEvents("Initial response"), finalMsg: textMsg },
+      { events: makeTextEvents(""), finalMsg: emptyMsg },
+    ]);
+
+    const registry = new ToolRegistry();
+    const result = await runLoop({
+      messages: [{ role: "user", content: "Hello" }],
+      client,
+      model: "claude-test",
+      tools: registry,
+      callbacks: {},
+    });
+
+    // Loop stops on first end_turn, empty never reached
+    expect(result.finalText).toBe("Initial response");
+  });
+});

@@ -31,7 +31,7 @@ Tool execution requires explicit user confirmation unless `--yes` is passed. Thi
 - **Runtime**: Bun ≥ 1.1 (no Node.js shims)
 - **Language**: TypeScript (strictest settings — see Principle II)
 - **Static analysis**: Biome
-- **AI provider**: Anthropic Claude (`claude-sonnet-4-6` default, overridable via `CHLOE_MODEL`); configurable endpoint via `CHLOE_BASE_URL` for Anthropic-protocol-compatible providers (e.g., OpenRouter)
+- **AI provider**: Anthropic Claude (`claude-sonnet-4-6` default model via `CHLOE_DEFAULT_MODEL` env var); supports multi-model routing with `CHLOE_REASONING_MODEL`, `CHLOE_FAST_MODEL`, `CHLOE_VISION_MODEL`; configurable endpoint via `CHLOE_BASE_URL` for Anthropic-protocol-compatible providers (e.g., OpenRouter)
 - **Storage**: `bun:sqlite` (default); pluggable via `StorageAdapter` interface
 - **Test runner**: `bun test`
 - **Package structure**: Bun workspace — `packages/core`, `packages/cli`, `packages/api`
@@ -49,4 +49,4 @@ Tool execution requires explicit user confirmation unless `--yes` is passed. Thi
 
 This constitution supersedes all other practices. Amendments require updating this document with a rationale comment. All implementation decisions must be verifiable against the spec and this constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-13 | **Last Amended**: 2026-04-13
+**Version**: 1.1.0 | **Ratified**: 2026-04-13 | **Last Amended**: 2026-04-16

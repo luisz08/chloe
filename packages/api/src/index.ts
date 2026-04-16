@@ -27,7 +27,7 @@ if (!cfg.provider.apiKey) {
 
 const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 const agent = createAgent({
-  model: cfg.provider.model,
+  model: cfg.provider.defaultModel,
   apiKey: cfg.provider.apiKey,
   ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
   storage,
