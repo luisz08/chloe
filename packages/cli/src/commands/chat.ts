@@ -1,4 +1,4 @@
-import type { AgentCallbacks } from "@chloe/core";
+import type { AgentCallbacks, ResolvedModelConfig } from "@chloe/core";
 import {
   SQLiteStorageAdapter,
   createAgent,
@@ -7,6 +7,7 @@ import {
   getLogger,
   initLogger,
   loadConfig,
+  resolveModelConfig,
 } from "@chloe/core";
 import { render } from "ink";
 import React from "react";
@@ -55,6 +56,14 @@ export async function chatCommand({
 
   const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 
+  // Build complete model config for multi-model routing
+  const modelConfig: ResolvedModelConfig = resolveModelConfig({
+    defaultModel: cfg.provider.defaultModel,
+    reasoningModel: cfg.provider.reasoningModel,
+    fastModel: cfg.provider.fastModel,
+    visionModel: cfg.provider.visionModel,
+  });
+
   // Resolve session based on mode
   let sessionId: string;
   let sessionName: string;
@@ -98,6 +107,7 @@ export async function chatCommand({
     apiKey: cfg.provider.apiKey,
     ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
     storage,
+    modelConfig,
   });
 
   const agent: AgentHandle = {

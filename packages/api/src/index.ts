@@ -1,4 +1,11 @@
-import { SQLiteStorageAdapter, createAgent, getLogger, initLogger, loadConfig } from "@chloe/core";
+import {
+  SQLiteStorageAdapter,
+  createAgent,
+  getLogger,
+  initLogger,
+  loadConfig,
+  resolveModelConfig,
+} from "@chloe/core";
 import { createRouter } from "./router.js";
 
 // Resolve port: --port flag > PORT env var > 3000
@@ -26,11 +33,21 @@ if (!cfg.provider.apiKey) {
 }
 
 const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
+
+// Build complete model config for multi-model routing
+const modelConfig = resolveModelConfig({
+  defaultModel: cfg.provider.defaultModel,
+  reasoningModel: cfg.provider.reasoningModel,
+  fastModel: cfg.provider.fastModel,
+  visionModel: cfg.provider.visionModel,
+});
+
 const agent = createAgent({
   model: cfg.provider.defaultModel,
   apiKey: cfg.provider.apiKey,
   ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
   storage,
+  modelConfig,
 });
 
 const port = resolvePort();

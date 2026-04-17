@@ -4,34 +4,27 @@ import type { Tool } from "../tools/types.js";
 
 // ─── Routing Types ───────────────────────────────────────────────────────────
 
-export type RouteTokenType = "REASONING" | "FAST" | "VISION";
-
+/**
+ * Image input detected in user message.
+ */
 export interface ImageInput {
   type: "path" | "url";
   value: string;
   mediaType?: string;
 }
 
-export interface DetectionState {
-  buffer: string;
-  lineStart: boolean;
-  detected: boolean;
-}
-
-export interface RouteDetectionResult {
-  detected: boolean;
-  token: RouteTokenType | null;
-  shouldAbort: boolean;
-  remainingText: string;
-}
-
+/**
+ * Routing state for tracking current execution context.
+ * Note: Route tokens removed - use subagent tools instead.
+ */
 export interface RoutingState {
   currentModel: string;
-  routeCount: number;
-  callingModel: string | null;
-  pendingToolCalls: ToolCallContext[];
+  callingTool: string | null;
 }
 
+/**
+ * Tool call context for tracking execution.
+ */
 export interface ToolCallContext {
   toolUseId: string;
   toolName: string;
@@ -39,6 +32,9 @@ export interface ToolCallContext {
   callingModel: string;
 }
 
+/**
+ * Resolved model configuration with fallback logic.
+ */
 export interface ResolvedModelConfig {
   defaultModel: string;
   reasoningModel: string;
@@ -54,6 +50,8 @@ export interface AgentConfig {
   baseURL?: string;
   tools?: Tool[];
   storage: StorageAdapter;
+  /** Optional: full model configuration for multi-model routing */
+  modelConfig?: ResolvedModelConfig;
 }
 
 export interface TurnUsage {

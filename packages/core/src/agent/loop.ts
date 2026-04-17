@@ -2,15 +2,26 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import { RouteDetector } from "./route-detector.js";
-import { MAX_ROUTE_SWITCHES, resolveTargetModel } from "./router.js";
-import type {
-  AgentCallbacks,
-  ResolvedModelConfig,
-  RouteTokenType,
-  RoutingState,
-  RunResult,
-} from "./types.js";
+import type { AgentCallbacks, ResolvedModelConfig, RoutingState, RunResult } from "./types.js";
+
+/**
+ * System prompt describing subagent tools for model guidance.
+ */
+const SUBAGENT_SYSTEM_PROMPT = `
+You have access to specialized subagent tools for delegating work to other models:
+
+- vision_analyze: Use when you need to understand image content (photos, screenshots, diagrams).
+  Provide an image path or URL and describe what you want to analyze.
+  Examples: "Describe this screenshot", "What text is in this image?", "Explain the diagram in this file".
+
+- fast_query: Use for simple, quick questions that need minimal processing.
+  Faster but less detailed responses. Good for quick lookups, simple calculations, or brief explanations.
+
+- deep_reasoning: Use for complex analysis, multi-step reasoning, or difficult problems.
+  More thorough but slower. Good for architectural decisions, complex debugging, or detailed analysis.
+
+When you encounter a task that matches these patterns, use the appropriate subagent tool instead of trying to do everything yourself. This helps you work more efficiently and leverage specialized capabilities.
+`;
 
 export interface RunLoopOptions {
   messages: MessageParam[];
@@ -129,7 +140,10 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       }
 
       try {
+        // Set callingTool for recursion prevention
+        tools.setCallingTool(toolName);
         const output = await tool.execute(toolInput);
+        tools.setCallingTool(null);
         log.debug("tool result", { tool: toolName, output_len: output.length });
         callbacks.onToolResult?.(toolName, output);
         toolResults.push({
@@ -138,6 +152,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
           content: output,
         });
       } catch (err) {
+        tools.setCallingTool(null);
         const message = err instanceof Error ? err.message : String(err);
         log.error("tool error", { tool: toolName, error: message });
         toolResults.push({
@@ -159,18 +174,15 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 // ─── Routing Run Loop ───────────────────────────────────────────────────────────
 
 /**
- * Routing-aware run loop with route token detection and model switching.
+ * Routing-aware run loop with subagent tool support.
  *
  * Key behaviors:
- * 1. Detects route tokens ([REASONING], [FAST], [VISION]) at line start during streaming
- * 2. Aborts stream when token detected, switches to target model
- * 3. Discards content from aborted stream, restarts with new model
- * 4. Enforces MAX_ROUTE_SWITCHES limit (force default_model after limit)
- * 5. Handles empty response after route token with regeneration attempt
- * 6. Pre-routed image requests: skip route detection when starting with vision_model
+ * 1. Uses vision_model for image-containing requests (pre-routing)
+ * 2. Provides subagent tools for model delegation
+ * 3. Single model execution per request (no mid-stream switching)
  */
 export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<RunResult> {
-  const { client, tools, callbacks, modelConfig, hasImages = false } = options;
+  const { client, tools, callbacks } = options;
   const messages: MessageParam[] = [...options.messages];
   let finalText = "";
   const log = getLogger("routing-loop");
@@ -178,18 +190,8 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
   // Initialize routing state
   const routingState: RoutingState = {
     currentModel: options.model,
-    routeCount: 0,
-    callingModel: null,
-    pendingToolCalls: [],
+    callingTool: null,
   };
-
-  const detector = new RouteDetector();
-
-  // Skip route detection for vision_model start (pre-routed image request)
-  const skipRouteDetection = hasImages && routingState.currentModel === modelConfig.visionModel;
-  if (skipRouteDetection) {
-    log.debug("pre-routed to vision_model, skipping route token detection");
-  }
 
   for (;;) {
     log.debug("llm request", { messages: messages.length, model: routingState.currentModel });
@@ -197,77 +199,19 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
     const stream = client.messages.stream({
       model: routingState.currentModel,
       max_tokens: 4096,
+      system: SUBAGENT_SYSTEM_PROMPT,
       tools: tools.list(),
       messages,
     });
 
     let currentText = "";
-    let aborted = false;
-    let detectedToken: RouteTokenType | null = null;
-
-    // Stream with route detection (skip if pre-routed)
-    try {
-      for await (const event of stream) {
-        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-          const deltaText = event.delta.text;
-
-          // Skip route token detection for vision_model on first stream
-          if (skipRouteDetection && routingState.routeCount === 0) {
-            currentText += deltaText;
-            callbacks.onToken?.(deltaText);
-            continue;
-          }
-
-          // Check for route token in stream
-          const detection = detector.detectInStream(deltaText);
-
-          if (detection.detected && detection.shouldAbort) {
-            // Route token detected - abort stream
-            aborted = true;
-            detectedToken = detection.token;
-            log.info("route token detected", {
-              token: detectedToken,
-              currentModel: routingState.currentModel,
-            });
-            break;
-          }
-
-          // No route token - accumulate text and call callback
-          if (!detection.detected) {
-            currentText += deltaText;
-            callbacks.onToken?.(deltaText);
-          }
-        }
-      }
-    } catch (err) {
-      // Stream aborted - expected behavior for route switching
-      if (err instanceof Error && err.message.includes("aborted")) {
-        log.debug("stream aborted for route switch");
-      } else {
-        throw err;
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        currentText += event.delta.text;
+        callbacks.onToken?.(event.delta.text);
       }
     }
 
-    // Handle route switch
-    if (aborted && detectedToken) {
-      // Check route count limit
-      routingState.routeCount++;
-      if (routingState.routeCount >= MAX_ROUTE_SWITCHES) {
-        log.warn("max route switches reached, forcing default_model");
-        routingState.currentModel = modelConfig.defaultModel;
-      } else {
-        // Switch to target model
-        routingState.currentModel = resolveTargetModel(detectedToken, modelConfig);
-      }
-
-      // Reset detector for new stream
-      detector.reset();
-
-      // Continue with same messages (discard aborted content)
-      continue;
-    }
-
-    // No route switch - complete the stream normally
     const finalMessage = await stream.finalMessage();
 
     callbacks.onUsage?.({
@@ -287,12 +231,6 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
 
     if (assistantContent.length > 0) {
       messages.push({ role: "assistant", content: assistantContent });
-    }
-
-    // Handle empty response after route switch
-    if (currentText.length === 0 && routingState.routeCount > 0) {
-      log.warn("empty response after route switch", { model: routingState.currentModel });
-      // Could attempt regeneration here - for now, log warning and continue
     }
 
     if (currentText.length > 0) {
@@ -324,14 +262,10 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
       const toolName = block.name;
       const toolInput = block.input;
 
-      // Track calling model for tool result routing
-      routingState.callingModel = routingState.currentModel;
-
       const inputStr = JSON.stringify(toolInput);
       log.info("tool call", {
         tool: toolName,
         input: inputStr.slice(0, 200),
-        callingModel: routingState.callingModel,
       });
       callbacks.onToolCall?.(toolName, toolInput);
 
@@ -361,26 +295,12 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
       }
 
       try {
+        // Set callingTool for recursion prevention
+        tools.setCallingTool(toolName);
         const output = await tool.execute(toolInput);
+        tools.setCallingTool(null);
         log.debug("tool result", { tool: toolName, output_len: output.length });
         callbacks.onToolResult?.(toolName, output);
-
-        // Check for route token in tool result (at line start)
-        const toolResultDetection = detector.detectInStream(output);
-        if (
-          toolResultDetection.detected &&
-          toolResultDetection.shouldAbort &&
-          toolResultDetection.token
-        ) {
-          log.info("route token in tool result", { token: toolResultDetection.token });
-          routingState.routeCount++;
-          if (routingState.routeCount >= MAX_ROUTE_SWITCHES) {
-            routingState.currentModel = modelConfig.defaultModel;
-          } else {
-            routingState.currentModel = resolveTargetModel(toolResultDetection.token, modelConfig);
-          }
-          detector.reset();
-        }
 
         toolResults.push({
           type: "tool_result",
@@ -388,6 +308,7 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
           content: output,
         });
       } catch (err) {
+        tools.setCallingTool(null);
         const message = err instanceof Error ? err.message : String(err);
         log.error("tool error", { tool: toolName, error: message });
         toolResults.push({
@@ -400,16 +321,6 @@ export async function routingRunLoop(options: RoutingRunLoopOptions): Promise<Ru
 
     if (toolResults.length > 0) {
       messages.push({ role: "user", content: toolResults });
-    }
-
-    // Return results to calling model after tool execution
-    if (routingState.callingModel && routingState.currentModel !== routingState.callingModel) {
-      // Switch back to calling model to process tool results
-      routingState.currentModel = routingState.callingModel;
-      routingState.callingModel = null;
-      log.debug("returning to calling model after tool execution", {
-        model: routingState.currentModel,
-      });
     }
   }
 

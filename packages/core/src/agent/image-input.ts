@@ -24,15 +24,22 @@ function buildExtensionPattern(): string {
 /**
  * Detect image paths and URLs in text.
  * Returns array of detected image inputs with type and value.
+ *
+ * Supports:
+ * - URLs: https?://...
+ * - Unix paths: /abs/path, ./rel/path, ../parent/path
+ * - Windows paths: C:\abs\path, .\rel\path, ..\parent\path, \abs\path
  */
 export function detectImages(text: string): ImageInput[] {
   const extPattern = buildExtensionPattern();
 
-  // Combined regex: URLs OR paths ending with image extension
+  // Combined regex supporting both forward slash (/) and backslash (\)
   // URL pattern: https?://[non-space chars]+[extension]
-  // Path pattern: (./ | / | ../ )[non-space chars]+[extension]
+  // Unix path: (./ | / | ../ ) followed by path
+  // Windows path: (.\ | \ | ..\ | C:\ etc) followed by path
   const combinedRegex = new RegExp(
-    `(https?:\\/\\/[^\\s]+?(?:${extPattern}))|(?:\\.\\/|\\/|\\.\\.\\/)[^\\s]+?(?:${extPattern})`,
+    // URL
+    `(https?:\\/\\/[^\\s]+?(?:${extPattern}))|(?:\\.(?:\\/|\\\\)[^\\s]+?(?:${extPattern}))|(?:\\.\\.(?:\\/|\\\\)[^\\s]+?(?:${extPattern}))|(?:\\/[^\\s]+?(?:${extPattern}))|(?:\\\\[^\\s]+?(?:${extPattern}))|(?:[A-Za-z]:\\\\[^\\s]+?(?:${extPattern}))`,
     "gi",
   );
 
@@ -56,11 +63,20 @@ export function detectImages(text: string): ImageInput[] {
     // Determine type: URL if it starts with http:// or https://
     const isUrl = value.startsWith("http://") || value.startsWith("https://");
 
+    // Normalize path: convert backslashes to forward slashes for cross-platform compatibility
+    const normalizedValue = isUrl ? value : value.replace(/\\/g, "/");
+
     images.push({
       type: isUrl ? "url" : "path",
-      value,
+      value: normalizedValue,
     });
     seen.add(value);
+
+    log.debug("image detected", {
+      original: value,
+      normalized: normalizedValue,
+      type: isUrl ? "url" : "path",
+    });
   }
 
   return images;

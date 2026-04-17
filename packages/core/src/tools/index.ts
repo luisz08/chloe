@@ -6,6 +6,7 @@ import { createWriteFileTool } from "./write-file.js";
 
 export { DEFAULT_TOOL_SETTINGS, loadToolSettings } from "./settings.js";
 export type { ToolSettings } from "./settings.js";
+export { createSubagentTools } from "./subagent.js";
 
 export function createDefaultTools(
   settings: ToolSettings,

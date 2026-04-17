@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
-import { createDefaultTools, loadToolSettings } from "../tools/index.js";
+import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { detectImages, toContentBlocks } from "./image-input.js";
 import { routingRunLoop } from "./loop.js";
@@ -21,8 +21,8 @@ export class Agent {
     this.registry = new ToolRegistry();
     this.bashPermissionRef = { current: null };
 
-    // Create model config from the model string (all models use same default)
-    this.modelConfig = resolveModelConfig({ defaultModel: config.model });
+    // Use provided modelConfig or create from model string
+    this.modelConfig = config.modelConfig ?? resolveModelConfig({ defaultModel: config.model });
 
     const tools =
       config.tools !== undefined
@@ -34,6 +34,14 @@ export class Agent {
           );
     for (const tool of tools) {
       this.registry.register(tool);
+    }
+
+    // Register subagent tools for multi-model delegation
+    if (config.tools === undefined) {
+      const subagentTools = createSubagentTools(this.client, this.modelConfig, this.registry);
+      for (const tool of subagentTools) {
+        this.registry.register(tool);
+      }
     }
   }
 

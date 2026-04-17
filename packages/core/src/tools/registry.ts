@@ -3,6 +3,21 @@ import type { Tool } from "./types.js";
 
 export class ToolRegistry {
   private readonly tools = new Map<string, Tool>();
+  private callingTool: string | null = null;
+
+  /**
+   * Set the name of the currently executing tool (for recursion prevention).
+   */
+  setCallingTool(name: string | null): void {
+    this.callingTool = name;
+  }
+
+  /**
+   * Get the name of the currently executing tool.
+   */
+  getCallingTool(): string | null {
+    return this.callingTool;
+  }
 
   register(tool: Tool): void {
     if (this.tools.has(tool.name)) {

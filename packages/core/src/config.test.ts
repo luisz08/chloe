@@ -125,7 +125,9 @@ describe("loadConfig", () => {
   });
 
   it("reads reasoning_model from config file with fallback", () => {
-    writeToml(`[provider]\ndefault_model = "claude-sonnet-4-6"\nreasoning_model = "claude-opus-4-6"\n`);
+    writeToml(
+      `[provider]\ndefault_model = "claude-sonnet-4-6"\nreasoning_model = "claude-opus-4-6"\n`,
+    );
     const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.provider.defaultModel).toBe("claude-sonnet-4-6");
     expect(cfg.provider.reasoningModel).toBe("claude-opus-4-6");
