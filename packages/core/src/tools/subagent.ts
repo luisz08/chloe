@@ -101,7 +101,9 @@ export function createVisionAnalyzeTool(
       required: ["prompt"],
     },
     async execute(input: unknown): Promise<string> {
-      // Check recursion prevention
+      // Defensive recursion prevention: this check cannot fire in the current design
+      // because inner client.messages.create calls pass no tools. It guards against
+      // accidental recursion if a future change propagates the registry deeper.
       if (registry.getCallingTool() === "vision_analyze") {
         return "Error: vision_analyze cannot call itself recursively";
       }
@@ -181,7 +183,9 @@ export function createFastQueryTool(
       required: ["query"],
     },
     async execute(input: unknown): Promise<string> {
-      // Check recursion prevention
+      // Defensive recursion prevention: this check cannot fire in the current design
+      // because inner client.messages.create calls pass no tools. It guards against
+      // accidental recursion if a future change propagates the registry deeper.
       if (registry.getCallingTool() === "fast_query") {
         return "Error: fast_query cannot call itself recursively";
       }
@@ -237,7 +241,9 @@ export function createDeepReasoningTool(
       required: ["problem"],
     },
     async execute(input: unknown): Promise<string> {
-      // Check recursion prevention
+      // Defensive recursion prevention: this check cannot fire in the current design
+      // because inner client.messages.create calls pass no tools. It guards against
+      // accidental recursion if a future change propagates the registry deeper.
       if (registry.getCallingTool() === "deep_reasoning") {
         return "Error: deep_reasoning cannot call itself recursively";
       }

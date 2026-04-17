@@ -14,25 +14,6 @@ export interface ImageInput {
 }
 
 /**
- * Routing state for tracking current execution context.
- * Note: Route tokens removed - use subagent tools instead.
- */
-export interface RoutingState {
-  currentModel: string;
-  callingTool: string | null;
-}
-
-/**
- * Tool call context for tracking execution.
- */
-export interface ToolCallContext {
-  toolUseId: string;
-  toolName: string;
-  toolInput: unknown;
-  callingModel: string;
-}
-
-/**
  * Resolved model configuration with fallback logic.
  */
 export interface ResolvedModelConfig {

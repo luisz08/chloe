@@ -3,10 +3,31 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
+import type { Tool } from "../tools/types.js";
 import { detectImages, toContentBlocks } from "./image-input.js";
-import { routingRunLoop } from "./loop.js";
-import { resolveModelConfig, selectInitialModel } from "./router.js";
+import { runLoop } from "./loop.js";
+import { isMultiModel, resolveModelConfig, selectInitialModel } from "./router.js";
 import type { AgentCallbacks, AgentConfig, ResolvedModelConfig, RunResult } from "./types.js";
+
+/**
+ * System prompt describing subagent tools for model guidance.
+ * Only attached when subagent tools are registered (multi-model mode).
+ */
+const SUBAGENT_SYSTEM_PROMPT = `
+You have access to specialized subagent tools for delegating work to other models:
+
+- vision_analyze: Use when you need to understand image content (photos, screenshots, diagrams).
+  Provide an image path or URL and describe what you want to analyze.
+  Examples: "Describe this screenshot", "What text is in this image?", "Explain the diagram in this file".
+
+- fast_query: Use for simple, quick questions that need minimal processing.
+  Faster but less detailed responses. Good for quick lookups, simple calculations, or brief explanations.
+
+- deep_reasoning: Use for complex analysis, multi-step reasoning, or difficult problems.
+  More thorough but slower. Good for architectural decisions, complex debugging, or detailed analysis.
+
+When you encounter a task that matches these patterns, use the appropriate subagent tool instead of trying to do everything yourself. This helps you work more efficiently and leverage specialized capabilities.
+`;
 
 export class Agent {
   private readonly client: Anthropic;
@@ -14,6 +35,7 @@ export class Agent {
   private readonly modelConfig: ResolvedModelConfig;
   private readonly registry: ToolRegistry;
   private readonly bashPermissionRef: { current: ((bin: string) => Promise<boolean>) | null };
+  private readonly subagentPromptActive: boolean;
 
   constructor(config: AgentConfig) {
     this.config = config;
@@ -24,20 +46,29 @@ export class Agent {
     // Use provided modelConfig or create from model string
     this.modelConfig = config.modelConfig ?? resolveModelConfig({ defaultModel: config.model });
 
-    const tools =
-      config.tools !== undefined
-        ? config.tools
-        : createDefaultTools(
-            loadToolSettings(process.cwd()),
-            process.cwd(),
-            this.bashPermissionRef,
-          );
+    let tools: Tool[];
+    if (config.tools !== undefined) {
+      tools = config.tools;
+    } else {
+      tools = createDefaultTools(
+        loadToolSettings(process.cwd()),
+        process.cwd(),
+        this.bashPermissionRef,
+      );
+    }
+
     for (const tool of tools) {
       this.registry.register(tool);
     }
 
-    // Register subagent tools for multi-model delegation
-    if (config.tools === undefined) {
+    // Register subagent tools only when:
+    // 1. Caller did not provide custom tools
+    // 2. Resolved config is effectively multi-model
+    const multiModel = isMultiModel(this.modelConfig);
+    const callerProvidedTools = config.tools !== undefined;
+    this.subagentPromptActive = multiModel && !callerProvidedTools;
+
+    if (this.subagentPromptActive) {
       const subagentTools = createSubagentTools(this.client, this.modelConfig, this.registry);
       for (const tool of subagentTools) {
         this.registry.register(tool);
@@ -86,15 +117,14 @@ export class Agent {
 
       messages.push({ role: "user", content: userContent });
 
-      // Run the routing-aware ReAct loop
-      const result = await routingRunLoop({
+      // Run the ReAct loop with optional system prompt for subagent tools
+      const result = await runLoop({
         messages,
         client: this.client,
         model: initialModel,
         tools: this.registry,
         callbacks,
-        modelConfig: this.modelConfig,
-        hasImages,
+        ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
       });
 
       // Persist the new messages (user + assistant turns added by the loop)

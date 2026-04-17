@@ -301,8 +301,8 @@ describe("runLoop", () => {
 
 // ─── Empty Response Handling Tests ─────────────────────────────────────────────
 //
-// T012a: Tests for empty response handling after route token detection.
-// Scenario: Target model outputs empty content, attempt regeneration.
+// Tests for handling empty text output from the model.
+// Scenario: Model outputs empty content, verify loop behavior.
 
 describe("empty response handling", () => {
   it("returns empty finalText when model outputs no text", async () => {
@@ -333,8 +333,8 @@ describe("empty response handling", () => {
   });
 
   it("handles empty after multiple calls", async () => {
-    // Note: Current runLoop stops on first end_turn, this test documents behavior
-    // In routingRunLoop, empty response after route token triggers regeneration
+    // Note: Current runLoop stops on first end_turn, this test documents behavior.
+    // The loop does not make additional calls after end_turn.
     const firstMsg = makeFinalTextMessage("Thinking...");
     const emptyMsg: Message = {
       id: "msg_empty",
@@ -361,8 +361,8 @@ describe("empty response handling", () => {
       callbacks: {},
     });
 
-    // Current runLoop behavior: stops on first end_turn, doesn't make second call
-    // This test documents the baseline behavior before routingRunLoop implementation
+    // Current runLoop behavior: stops on first end_turn, doesn't make second call.
+    // This test documents the baseline behavior.
     expect(result.finalText).toBe("Thinking...");
   });
 

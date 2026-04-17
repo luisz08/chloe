@@ -1,5 +1,7 @@
 # Review Guide: Multi-Model Routing System
 
+> **SUPERSEDED BY spec 010**: This document describes the route-token design, which was replaced by subagent tools. See `specs/010-single-model-routing-fix/` for the current design.
+
 **Spec:** [spec.md](spec.md) | **Plan:** [plan.md](plan.md) | **Tasks:** [tasks.md](tasks.md)
 **Generated:** 2026-04-16
 
