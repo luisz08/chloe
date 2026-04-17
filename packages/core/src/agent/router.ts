@@ -46,3 +46,15 @@ export function selectInitialModel(hasImages: boolean, config: ResolvedModelConf
   }
   return config.defaultModel;
 }
+
+/**
+ * Check if the resolved config is effectively multi-model.
+ * Returns true iff any specialized model differs from defaultModel.
+ */
+export function isMultiModel(config: ResolvedModelConfig): boolean {
+  return (
+    config.reasoningModel !== config.defaultModel ||
+    config.fastModel !== config.defaultModel ||
+    config.visionModel !== config.defaultModel
+  );
+}

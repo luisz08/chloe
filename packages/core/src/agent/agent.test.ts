@@ -119,3 +119,218 @@ describe("Agent — provider configuration", () => {
     await expect(agent.run("session-1", "hello", {})).rejects.toThrow("provider unavailable");
   });
 });
+
+// ─── Subagent Tool Gating Tests ───────────────────────────────────────────────
+
+import type Anthropic from "@anthropic-ai/sdk";
+import type { TextBlock } from "@anthropic-ai/sdk/resources/messages";
+import { SQLiteStorageAdapter } from "../storage/sqlite.js";
+import { resolveModelConfig } from "./router.js";
+
+// Mock helpers for stream capture
+
+interface CapturedStreamParams {
+  model: string;
+  system?: string | undefined;
+  tools: Array<{ name: string }>;
+}
+
+function makeCapturingMockModule(captured: CapturedStreamParams[]) {
+  return {
+    default: class MockAnthropic {
+      messages = {
+        stream: (params: unknown) => {
+          const p = params as Anthropic.Messages.MessageStreamParams;
+          const entry: CapturedStreamParams = {
+            model: p.model,
+            tools: (p.tools ?? []).map((t) => ({ name: t.name })),
+          };
+          if (typeof p.system === "string") {
+            entry.system = p.system;
+          }
+          captured.push(entry);
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              yield { type: "message_start", message: {} };
+              yield {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "text", text: "" },
+              };
+              yield {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "OK" },
+              };
+              yield { type: "content_block_stop", index: 0 };
+              yield {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: null },
+                usage: { output_tokens: 10 },
+              };
+              yield { type: "message_stop" };
+            },
+            finalMessage: async () => ({
+              id: "msg_1",
+              type: "message",
+              role: "assistant",
+              content: [{ type: "text", text: "OK" } as TextBlock],
+              model: "claude-test",
+              stop_reason: "end_turn",
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 10 },
+            }),
+          };
+        },
+      };
+    },
+  };
+}
+
+describe("Agent — subagent tool gating", () => {
+  it("single-model config omits subagent tools", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    // Re-import after mock
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    const modelConfig = resolveModelConfig({ defaultModel: "claude-sonnet-4-6" });
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      storage,
+      modelConfig,
+    });
+
+    await agent.run("test-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    const streamParams = captured[0];
+    const toolNames = streamParams?.tools.map((t) => t.name) ?? [];
+    expect(toolNames).not.toContain("vision_analyze");
+    expect(toolNames).not.toContain("fast_query");
+    expect(toolNames).not.toContain("deep_reasoning");
+  });
+
+  it("single-model config omits subagent system prompt", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    const modelConfig = resolveModelConfig({ defaultModel: "claude-sonnet-4-6" });
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      storage,
+      modelConfig,
+    });
+
+    await agent.run("test-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    expect(captured[0]?.system).toBeUndefined();
+  });
+
+  it("multi-model config registers all subagent tools", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    const modelConfig = resolveModelConfig({
+      defaultModel: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5-20251001",
+    });
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      storage,
+      modelConfig,
+    });
+
+    await agent.run("test-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    const streamParams = captured[0];
+    const toolNames = streamParams?.tools.map((t) => t.name) ?? [];
+    expect(toolNames).toContain("vision_analyze");
+    expect(toolNames).toContain("fast_query");
+    expect(toolNames).toContain("deep_reasoning");
+  });
+
+  it("multi-model config attaches subagent system prompt", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    const modelConfig = resolveModelConfig({
+      defaultModel: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5-20251001",
+    });
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      storage,
+      modelConfig,
+    });
+
+    await agent.run("test-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    const systemPrompt = captured[0]?.system;
+    expect(systemPrompt).toBeDefined();
+    expect(systemPrompt).toContain("subagent");
+  });
+
+  it("caller-supplied tools disable subagent prompt even in multi-model config", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    const modelConfig = resolveModelConfig({
+      defaultModel: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5-20251001",
+    });
+
+    const customTool = {
+      name: "custom_tool",
+      description: "A custom tool",
+      inputSchema: { type: "object" as const, properties: {}, required: [] },
+      async execute(): Promise<string> {
+        return "done";
+      },
+    };
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      storage,
+      modelConfig,
+      tools: [customTool],
+    });
+
+    await agent.run("test-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    const streamParams = captured[0];
+    const toolNames = streamParams?.tools.map((t) => t.name) ?? [];
+    expect(toolNames).toEqual(["custom_tool"]);
+    expect(toolNames).not.toContain("vision_analyze");
+    expect(toolNames).not.toContain("fast_query");
+    expect(toolNames).not.toContain("deep_reasoning");
+    expect(streamParams?.system).toBeUndefined();
+  });
+});
