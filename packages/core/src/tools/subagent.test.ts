@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 import type { ResolvedModelConfig } from "../agent/types.js";
+import { SQLiteStorageAdapter } from "../storage/sqlite.js";
 import { ToolRegistry } from "./registry.js";
 import {
   createDeepReasoningTool,
@@ -9,7 +10,7 @@ import {
   createSubagentTools,
   createVisionAnalyzeTool,
 } from "./subagent.js";
-import type { Tool } from "./types.js";
+import type { Tool, ToolContext } from "./types.js";
 
 // Mock Anthropic client - simple approach
 interface MockClient {
@@ -84,7 +85,7 @@ describe("createVisionAnalyzeTool", () => {
 
   it("should return error when called recursively", async () => {
     registry.setCallingTool("vision_analyze");
-    const result = await tool.execute({ prompt: "test" });
+    const result = await tool.execute({ prompt: "test", url: "https://example.com/image.png" });
     expect(result).toContain("Error");
     expect(result).toContain("recursively");
   });
@@ -104,6 +105,57 @@ describe("createVisionAnalyzeTool", () => {
     expect(result).toContain("Mock response");
     expect(mockClientResult.calls.length).toBe(1);
     expect(mockClientResult.calls[0]?.model).toBe(mockModelConfig.visionModel);
+  });
+
+  it("should clear callingTool after successful execution", async () => {
+    registry.setCallingTool(null);
+    await tool.execute({
+      url: "https://example.com/image.png",
+      prompt: "What is in this image?",
+    });
+    // After execution, callingTool should be cleared
+    expect(registry.getCallingTool()).toBeNull();
+  });
+
+  it("should clear callingTool after error", async () => {
+    // Create mock client that throws
+    const errorClient = {
+      messages: {
+        create: async (): Promise<Message> => {
+          throw new Error("API error");
+        },
+      },
+    } as unknown as Anthropic;
+
+    const errorTool = createVisionAnalyzeTool(errorClient, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await errorTool.execute({
+      url: "https://example.com/image.png",
+      prompt: "What is in this image?",
+    });
+    // After error, callingTool should be cleared
+    expect(registry.getCallingTool()).toBeNull();
+  });
+
+  it("should allow sequential calls after clearing callingTool", async () => {
+    registry.setCallingTool(null);
+
+    // First call
+    const result1 = await tool.execute({
+      url: "https://example.com/image.png",
+      prompt: "First image",
+    });
+    expect(result1).toContain("Mock response");
+    expect(registry.getCallingTool()).toBeNull();
+
+    // Second call should work (callingTool was cleared)
+    const result2 = await tool.execute({
+      url: "https://example.com/image2.png",
+      prompt: "Second image",
+    });
+    expect(result2).toContain("Mock response");
+    expect(mockClientResult.calls.length).toBe(2);
   });
 });
 
@@ -144,6 +196,22 @@ describe("createFastQueryTool", () => {
     expect(result).toContain("Mock response");
     expect(mockClientResult.calls.length).toBe(1);
     expect(mockClientResult.calls[0]?.model).toBe(mockModelConfig.fastModel);
+  });
+
+  it("should clear callingTool after successful execution", async () => {
+    registry.setCallingTool(null);
+    await tool.execute({ query: "Test query" });
+    expect(registry.getCallingTool()).toBeNull();
+  });
+
+  it("should allow sequential calls after clearing callingTool", async () => {
+    registry.setCallingTool(null);
+
+    await tool.execute({ query: "First query" });
+    expect(registry.getCallingTool()).toBeNull();
+
+    await tool.execute({ query: "Second query" });
+    expect(mockClientResult.calls.length).toBe(2);
   });
 });
 
@@ -197,6 +265,22 @@ describe("createDeepReasoningTool", () => {
     expect(content).toContain("Context:");
     expect(content).toContain("Additional context info");
   });
+
+  it("should clear callingTool after successful execution", async () => {
+    registry.setCallingTool(null);
+    await tool.execute({ problem: "Test problem" });
+    expect(registry.getCallingTool()).toBeNull();
+  });
+
+  it("should allow sequential calls after clearing callingTool", async () => {
+    registry.setCallingTool(null);
+
+    await tool.execute({ problem: "First problem" });
+    expect(registry.getCallingTool()).toBeNull();
+
+    await tool.execute({ problem: "Second problem" });
+    expect(mockClientResult.calls.length).toBe(2);
+  });
 });
 
 // ─── createSubagentTools Factory Tests ───────────────────────────────────────────
@@ -248,5 +332,133 @@ describe("ToolRegistry callingTool", () => {
 
   it("should return null initially", () => {
     expect(registry.getCallingTool()).toBeNull();
+  });
+});
+
+// ─── Session-Aware Subagent Tests ───────────────────────────────────────────────
+
+describe("Subagent session creation", () => {
+  let mockClientResult: MockClient;
+  let storage: SQLiteStorageAdapter;
+  let registry: ToolRegistry;
+  let context: ToolContext;
+
+  beforeEach(() => {
+    mockClientResult = createMockClient();
+    storage = new SQLiteStorageAdapter(":memory:");
+    registry = new ToolRegistry();
+
+    // Create a parent session
+    storage.createSession("parent-session", "Test Parent Session");
+
+    context = {
+      sessionId: "parent-session",
+      storage,
+      client: mockClientResult.client,
+      modelConfig: mockModelConfig,
+    };
+  });
+
+  it("should create child session when context is provided", async () => {
+    const tool = createFastQueryTool(mockClientResult.client, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await tool.execute({ query: "What is the capital of France?" }, context);
+
+    // Check child session was created
+    const children = await storage.getChildSessions("parent-session");
+    expect(children.length).toBe(1);
+    expect(children[0]?.parentId).toBe("parent-session");
+    expect(children[0]?.subagentType).toBe("fast_query");
+  });
+
+  it("should persist request and response messages in child session", async () => {
+    const tool = createFastQueryTool(mockClientResult.client, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await tool.execute({ query: "Test query" }, context);
+
+    const children = await storage.getChildSessions("parent-session");
+    expect(children.length).toBe(1);
+
+    const messages = await storage.getMessages(children[0]?.id ?? "");
+    expect(messages.length).toBe(2);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages[1]?.role).toBe("assistant");
+  });
+
+  it("should persist metadata including tokens and model", async () => {
+    const tool = createFastQueryTool(mockClientResult.client, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await tool.execute({ query: "Test query" }, context);
+
+    const children = await storage.getChildSessions("parent-session");
+    const messages = await storage.getMessages(children[0]?.id ?? "");
+
+    const responseMsg = messages[1]?.content as { type: string; metadata: Record<string, unknown> };
+    expect(responseMsg?.type).toBe("subagent_response");
+    expect(responseMsg?.metadata?.input_tokens).toBe(100);
+    expect(responseMsg?.metadata?.output_tokens).toBe(50);
+    expect(responseMsg?.metadata?.model).toBe(mockModelConfig.fastModel);
+    expect(responseMsg?.metadata?.elapsed_ms).toBeDefined();
+    expect(typeof responseMsg?.metadata?.elapsed_ms).toBe("number");
+  });
+
+  it("should create child session even on API error", async () => {
+    // Create mock client that throws
+    const errorClient = {
+      messages: {
+        create: async (): Promise<Message> => {
+          throw new Error("API unavailable");
+        },
+      },
+    } as unknown as Anthropic;
+
+    const tool = createFastQueryTool(errorClient, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    const result = await tool.execute({ query: "Test query" }, context);
+    expect(result).toContain("Error");
+
+    // Check child session was still created
+    const children = await storage.getChildSessions("parent-session");
+    expect(children.length).toBe(1);
+
+    // Check error was persisted
+    const messages = await storage.getMessages(children[0]?.id ?? "");
+    expect(messages.length).toBe(2);
+    const responseMsg = messages[1]?.content as { type: string; error: string };
+    expect(responseMsg?.error).toContain("API unavailable");
+  });
+
+  it("should not create child session when context is not provided", async () => {
+    const tool = createFastQueryTool(mockClientResult.client, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await tool.execute({ query: "Test query" }); // No context
+
+    const children = await storage.getChildSessions("parent-session");
+    expect(children.length).toBe(0);
+  });
+
+  it("should preserve image path in vision_analyze request", async () => {
+    const tool = createVisionAnalyzeTool(mockClientResult.client, mockModelConfig, registry);
+    registry.setCallingTool(null);
+
+    await tool.execute(
+      {
+        url: "https://example.com/image.png",
+        prompt: "Describe this image",
+      },
+      context,
+    );
+
+    const children = await storage.getChildSessions("parent-session");
+    const messages = await storage.getMessages(children[0]?.id ?? "");
+
+    const requestMsg = messages[0]?.content as { type: string; imageUrl: string };
+    expect(requestMsg?.type).toBe("subagent_request");
+    expect(requestMsg?.imageUrl).toBe("https://example.com/image.png");
   });
 });

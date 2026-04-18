@@ -7,6 +7,7 @@
  * - deep_reasoning: Complex analysis using reasoning model
  *
  * Each subagent makes a single API call and returns text result.
+ * When ToolContext is provided, creates child session and persists request/response.
  * Recursion prevention: subagents cannot call themselves.
  */
 
@@ -19,8 +20,9 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 import type { ResolvedModelConfig } from "../agent/types.js";
 import { getLogger } from "../logger/index.js";
+import type { SubagentRequestContent, SubagentResponseContent } from "../session/types.js";
 import type { ToolRegistry } from "./registry.js";
-import type { Tool } from "./types.js";
+import type { Tool, ToolContext } from "./types.js";
 
 const log = getLogger("subagent");
 
@@ -70,6 +72,90 @@ function buildImageBlock(
   }
 }
 
+// ─── Helper: Persist Subagent Call ────────────────────────────────────────────────
+
+async function persistSubagentCall(
+  context: ToolContext,
+  subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+  requestContent: SubagentRequestContent,
+  responseText: string,
+  response: Anthropic.Messages.Message,
+  elapsedMs: number,
+): Promise<void> {
+  const { storage, sessionId } = context;
+
+  // Generate title from prompt preview
+  const promptPreview = requestContent.prompt.slice(0, 50);
+  const title = `${subagentType}: ${promptPreview}`;
+
+  // Create child session
+  const childSession = await storage.createChildSession(sessionId, subagentType, title);
+
+  // Persist request as user message
+  await storage.appendMessage(childSession.id, "user", requestContent);
+
+  // Build response content with metadata
+  const responseContent: SubagentResponseContent = {
+    type: "subagent_response",
+    text: responseText,
+    metadata: {
+      api_message_id: response.id,
+      model: response.model,
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+      stop_reason: response.stop_reason ?? "end_turn",
+      elapsed_ms: elapsedMs,
+    },
+  };
+
+  // Persist response as assistant message
+  await storage.appendMessage(childSession.id, "assistant", responseContent);
+
+  log.debug("subagent session persisted", {
+    childSession: childSession.id,
+    parentSession: sessionId,
+    type: subagentType,
+  });
+}
+
+async function persistSubagentError(
+  context: ToolContext,
+  subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+  requestContent: SubagentRequestContent,
+  errorMessage: string,
+): Promise<void> {
+  const { storage, sessionId } = context;
+
+  const promptPreview = requestContent.prompt.slice(0, 50);
+  const title = `${subagentType}: ${promptPreview}`;
+
+  const childSession = await storage.createChildSession(sessionId, subagentType, title);
+  await storage.appendMessage(childSession.id, "user", requestContent);
+
+  const responseContent: SubagentResponseContent = {
+    type: "subagent_response",
+    text: "",
+    metadata: {
+      api_message_id: "",
+      model: "",
+      input_tokens: 0,
+      output_tokens: 0,
+      stop_reason: "error",
+      elapsed_ms: 0,
+    },
+    error: errorMessage,
+  };
+
+  await storage.appendMessage(childSession.id, "assistant", responseContent);
+
+  log.debug("subagent error session persisted", {
+    childSession: childSession.id,
+    parentSession: sessionId,
+    type: subagentType,
+    error: errorMessage,
+  });
+}
+
 // ─── Vision Analyze Tool ────────────────────────────────────────────────────────
 
 export function createVisionAnalyzeTool(
@@ -100,21 +186,13 @@ export function createVisionAnalyzeTool(
       },
       required: ["prompt"],
     },
-    async execute(input: unknown): Promise<string> {
-      // Defensive recursion prevention: this check cannot fire in the current design
-      // because inner client.messages.create calls pass no tools. It guards against
-      // accidental recursion if a future change propagates the registry deeper.
-      if (registry.getCallingTool() === "vision_analyze") {
-        return "Error: vision_analyze cannot call itself recursively";
-      }
-
+    async execute(input: unknown, context?: ToolContext): Promise<string> {
       const args = input as { path?: string; url?: string; prompt: string };
       const { prompt } = args;
 
       // Build message content
       const content: ContentBlockParam[] = [];
 
-      // Add image if provided
       if (args.path) {
         const imageBlock = buildImageBlock({ type: "path", value: args.path });
         if (imageBlock !== null) {
@@ -127,11 +205,9 @@ export function createVisionAnalyzeTool(
         }
       }
 
-      // Add text prompt
       content.push({ type: "text", text: prompt });
 
       if (content.length === 1 && content[0]?.type === "text") {
-        // No image provided - return error
         return "Error: No image provided. Please specify either 'path' or 'url' parameter.";
       }
 
@@ -140,23 +216,70 @@ export function createVisionAnalyzeTool(
         hasImage: content.some((c) => c.type === "image"),
       });
 
-      // Call vision model
-      const response = await client.messages.create({
-        model: modelConfig.visionModel,
-        max_tokens: 4096,
-        messages: [{ role: "user", content }],
-      });
+      // Build request content for persistence
+      const requestContent: SubagentRequestContent = {
+        type: "subagent_request",
+        prompt,
+      };
+      if (args.path !== undefined) {
+        requestContent.imagePath = args.path;
+      }
+      if (args.url !== undefined) {
+        requestContent.imageUrl = args.url;
+      }
 
-      // Extract text from response
-      const textBlocks = response.content.filter((block) => block.type === "text");
-      const result = textBlocks.map((b) => b.text).join("\n");
+      const startMs = Date.now();
 
-      log.debug("vision_analyze response", {
-        tokens: response.usage.output_tokens,
-        textLength: result.length,
-      });
+      // Recursion prevention: check if already being called
+      if (registry.getCallingTool() === "vision_analyze") {
+        return "Error: vision_analyze cannot call itself recursively";
+      }
 
-      return result;
+      registry.setCallingTool("vision_analyze");
+
+      try {
+        const response = await client.messages.create({
+          model: modelConfig.visionModel,
+          max_tokens: 4096,
+          messages: [{ role: "user", content }],
+        });
+
+        registry.setCallingTool(null);
+
+        const elapsedMs = Date.now() - startMs;
+
+        const textBlocks = response.content.filter((block) => block.type === "text");
+        const result = textBlocks.map((b) => b.text).join("\n");
+
+        log.debug("vision_analyze response", {
+          tokens: response.usage.output_tokens,
+          textLength: result.length,
+        });
+
+        // Persist if context available
+        if (context !== undefined) {
+          await persistSubagentCall(
+            context,
+            "vision_analyze",
+            requestContent,
+            result,
+            response,
+            elapsedMs,
+          );
+        }
+
+        return result;
+      } catch (err) {
+        registry.setCallingTool(null);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log.error("vision_analyze error", { error: errorMessage });
+
+        if (context !== undefined) {
+          await persistSubagentError(context, "vision_analyze", requestContent, errorMessage);
+        }
+
+        return `Error: ${errorMessage}`;
+      }
     },
   };
 }
@@ -182,35 +305,67 @@ export function createFastQueryTool(
       },
       required: ["query"],
     },
-    async execute(input: unknown): Promise<string> {
-      // Defensive recursion prevention: this check cannot fire in the current design
-      // because inner client.messages.create calls pass no tools. It guards against
-      // accidental recursion if a future change propagates the registry deeper.
-      if (registry.getCallingTool() === "fast_query") {
-        return "Error: fast_query cannot call itself recursively";
-      }
-
+    async execute(input: unknown, context?: ToolContext): Promise<string> {
       const args = input as { query: string };
 
       log.debug("fast_query request", { model: modelConfig.fastModel });
 
-      // Call fast model
-      const response = await client.messages.create({
-        model: modelConfig.fastModel,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: args.query }],
-      });
+      const requestContent: SubagentRequestContent = {
+        type: "subagent_request",
+        prompt: args.query,
+      };
 
-      // Extract text from response
-      const textBlocks = response.content.filter((block) => block.type === "text");
-      const result = textBlocks.map((b) => b.text).join("\n");
+      const startMs = Date.now();
 
-      log.debug("fast_query response", {
-        tokens: response.usage.output_tokens,
-        textLength: result.length,
-      });
+      // Recursion prevention: check if already being called
+      if (registry.getCallingTool() === "fast_query") {
+        return "Error: fast_query cannot call itself recursively";
+      }
 
-      return result;
+      registry.setCallingTool("fast_query");
+
+      try {
+        const response = await client.messages.create({
+          model: modelConfig.fastModel,
+          max_tokens: 2048,
+          messages: [{ role: "user", content: args.query }],
+        });
+
+        registry.setCallingTool(null);
+
+        const elapsedMs = Date.now() - startMs;
+
+        const textBlocks = response.content.filter((block) => block.type === "text");
+        const result = textBlocks.map((b) => b.text).join("\n");
+
+        log.debug("fast_query response", {
+          tokens: response.usage.output_tokens,
+          textLength: result.length,
+        });
+
+        if (context !== undefined) {
+          await persistSubagentCall(
+            context,
+            "fast_query",
+            requestContent,
+            result,
+            response,
+            elapsedMs,
+          );
+        }
+
+        return result;
+      } catch (err) {
+        registry.setCallingTool(null);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log.error("fast_query error", { error: errorMessage });
+
+        if (context !== undefined) {
+          await persistSubagentError(context, "fast_query", requestContent, errorMessage);
+        }
+
+        return `Error: ${errorMessage}`;
+      }
     },
   };
 }
@@ -240,40 +395,74 @@ export function createDeepReasoningTool(
       },
       required: ["problem"],
     },
-    async execute(input: unknown): Promise<string> {
-      // Defensive recursion prevention: this check cannot fire in the current design
-      // because inner client.messages.create calls pass no tools. It guards against
-      // accidental recursion if a future change propagates the registry deeper.
-      if (registry.getCallingTool() === "deep_reasoning") {
-        return "Error: deep_reasoning cannot call itself recursively";
-      }
-
+    async execute(input: unknown, context?: ToolContext): Promise<string> {
       const args = input as { problem: string; context?: string };
 
-      // Build message content
-      const content: MessageParam["content"] = args.context
+      const messageContent: MessageParam["content"] = args.context
         ? `Context:\n${args.context}\n\nProblem:\n${args.problem}`
         : args.problem;
 
       log.debug("deep_reasoning request", { model: modelConfig.reasoningModel });
 
-      // Call reasoning model
-      const response = await client.messages.create({
-        model: modelConfig.reasoningModel,
-        max_tokens: 8192,
-        messages: [{ role: "user", content }],
-      });
+      const requestContent: SubagentRequestContent = {
+        type: "subagent_request",
+        prompt: args.problem,
+      };
+      if (args.context !== undefined) {
+        requestContent.context = args.context;
+      }
 
-      // Extract text from response
-      const textBlocks = response.content.filter((block) => block.type === "text");
-      const result = textBlocks.map((b) => b.text).join("\n");
+      const startMs = Date.now();
 
-      log.debug("deep_reasoning response", {
-        tokens: response.usage.output_tokens,
-        textLength: result.length,
-      });
+      // Recursion prevention: check if already being called
+      if (registry.getCallingTool() === "deep_reasoning") {
+        return "Error: deep_reasoning cannot call itself recursively";
+      }
 
-      return result;
+      registry.setCallingTool("deep_reasoning");
+
+      try {
+        const response = await client.messages.create({
+          model: modelConfig.reasoningModel,
+          max_tokens: 8192,
+          messages: [{ role: "user", content: messageContent }],
+        });
+
+        registry.setCallingTool(null);
+
+        const elapsedMs = Date.now() - startMs;
+
+        const textBlocks = response.content.filter((block) => block.type === "text");
+        const result = textBlocks.map((b) => b.text).join("\n");
+
+        log.debug("deep_reasoning response", {
+          tokens: response.usage.output_tokens,
+          textLength: result.length,
+        });
+
+        if (context !== undefined) {
+          await persistSubagentCall(
+            context,
+            "deep_reasoning",
+            requestContent,
+            result,
+            response,
+            elapsedMs,
+          );
+        }
+
+        return result;
+      } catch (err) {
+        registry.setCallingTool(null);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        log.error("deep_reasoning error", { error: errorMessage });
+
+        if (context !== undefined) {
+          await persistSubagentError(context, "deep_reasoning", requestContent, errorMessage);
+        }
+
+        return `Error: ${errorMessage}`;
+      }
     },
   };
 }

@@ -19,7 +19,31 @@ function parseArgs(): void {
     const sessionsSubcommand = args[1];
 
     if (sessionsSubcommand === "list") {
-      sessionsCommand({ subcommand: "list" }).catch((err) => {
+      let tree: string | undefined;
+      let children: string | undefined;
+      let type: string | undefined;
+      let id: string | undefined;
+
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === "--tree") {
+          tree = "true";
+        } else if (args[i] === "--children") {
+          children = "true";
+        } else if (args[i] === "--type" && args[i + 1]) {
+          type = args[i + 1];
+          i++;
+        } else if (!args[i]?.startsWith("--") && !id) {
+          id = args[i];
+        }
+      }
+
+      sessionsCommand({
+        subcommand: "list",
+        ...(id !== undefined ? { id } : {}),
+        ...(tree !== undefined ? { tree } : {}),
+        ...(children !== undefined ? { children } : {}),
+        ...(type !== undefined ? { type } : {}),
+      }).catch((err) => {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       });
