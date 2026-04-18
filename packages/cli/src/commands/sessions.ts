@@ -1,8 +1,12 @@
 import { SQLiteStorageAdapter, loadConfig } from "@chloe/core";
+import type { SessionTree } from "@chloe/core";
 
 interface SessionsCommandOptions {
   subcommand: "list" | "delete";
   id?: string;
+  tree?: string;
+  children?: string;
+  type?: string;
 }
 
 function formatDate(timestamp: number): string {
@@ -19,23 +23,91 @@ function padEnd(str: string, length: number): string {
   return str.length >= length ? str : str + " ".repeat(length - str.length);
 }
 
-export async function sessionsCommand({ subcommand, id }: SessionsCommandOptions): Promise<void> {
+function printTree(tree: SessionTree, indent = ""): void {
+  const prefix =
+    indent === "" ? "" : indent.slice(0, -4) + (indent.endsWith("    ") ? "└── " : "├── ");
+  const sessionInfo = tree.session.subagentType
+    ? `${tree.session.id} (${tree.session.subagentType})`
+    : `${tree.session.id} (root)`;
+  console.log(`${prefix}${sessionInfo}`);
+
+  for (let i = 0; i < tree.children.length; i++) {
+    const isLast = i === tree.children.length - 1;
+    const nextIndent = indent + (isLast ? "    " : "│   ");
+    const child = tree.children[i];
+    if (child !== undefined) {
+      printTree(child, nextIndent);
+    }
+  }
+}
+
+export async function sessionsCommand({
+  subcommand,
+  id,
+  tree,
+  children,
+  type,
+}: SessionsCommandOptions): Promise<void> {
   const cfg = loadConfig();
   const storage = new SQLiteStorageAdapter(cfg.storage.dbPath);
 
   if (subcommand === "list") {
-    const sessions = await storage.listSessions();
+    if (tree !== undefined && id !== undefined) {
+      // Show tree for specific session
+      try {
+        const sessionTree = await storage.getSessionTree(id);
+        printTree(sessionTree);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Error: ${message}`);
+        process.exit(1);
+      }
+    } else if (children !== undefined && id !== undefined) {
+      // Show children for specific session
+      const childSessions = await storage.getChildSessions(id);
+      if (childSessions.length === 0) {
+        console.log("No child sessions found.");
+      } else {
+        console.log(`${padEnd("ID", 48)}${padEnd("TYPE", 16)}${padEnd("CREATED", 21)}`);
+        for (const child of childSessions) {
+          const childId = padEnd(child.id, 48);
+          const childType = padEnd(child.subagentType ?? "", 16);
+          const created = padEnd(formatDate(child.createdAt), 21);
+          console.log(`${childId}${childType}${created}`);
+        }
+      }
+    } else if (type !== undefined) {
+      // Filter by subagent type
+      const sessions = await storage.listSessionsByType(type);
+      if (sessions.length === 0) {
+        console.log(`No sessions found with type: ${type}`);
+      } else {
+        console.log(
+          `${padEnd("ID", 48)}${padEnd("NAME", 16)}${padEnd("CREATED", 21)}${padEnd("LAST ACTIVE", 21)}`,
+        );
+        for (const session of sessions) {
+          const sid = padEnd(session.id, 48);
+          const name = padEnd(session.name, 16);
+          const created = padEnd(formatDate(session.createdAt), 21);
+          const lastActive = padEnd(formatDate(session.updatedAt), 21);
+          console.log(`${sid}${name}${created}${lastActive}`);
+        }
+      }
+    } else {
+      // Default list behavior
+      const sessions = await storage.listSessions();
 
-    console.log(
-      `${padEnd("ID", 16)}${padEnd("NAME", 16)}${padEnd("CREATED", 21)}${padEnd("LAST ACTIVE", 21)}`,
-    );
+      console.log(
+        `${padEnd("ID", 16)}${padEnd("NAME", 16)}${padEnd("CREATED", 21)}${padEnd("LAST ACTIVE", 21)}`,
+      );
 
-    for (const session of sessions) {
-      const id = padEnd(session.id, 16);
-      const name = padEnd(session.name, 16);
-      const created = padEnd(formatDate(session.createdAt), 21);
-      const lastActive = padEnd(formatDate(session.updatedAt), 21);
-      console.log(`${id}${name}${created}${lastActive}`);
+      for (const session of sessions) {
+        const sid = padEnd(session.id, 16);
+        const name = padEnd(session.name, 16);
+        const created = padEnd(formatDate(session.createdAt), 21);
+        const lastActive = padEnd(formatDate(session.updatedAt), 21);
+        console.log(`${sid}${name}${created}${lastActive}`);
+      }
     }
   } else if (subcommand === "delete") {
     if (!id) {

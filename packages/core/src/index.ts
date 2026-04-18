@@ -36,10 +36,24 @@ export type { StorageAdapter } from "./storage/adapter.js";
 export { SQLiteStorageAdapter } from "./storage/sqlite.js";
 
 // Session
-export type { Message, Session, SessionSummary } from "./session/types.js";
-export { slugify, validateSessionId } from "./session/slug.js";
+export type {
+  Message,
+  Session,
+  SessionSummary,
+  SessionTree,
+  SubagentRequestContent,
+  SubagentResponseContent,
+} from "./session/types.js";
+export {
+  slugify,
+  validateSessionId,
+} from "./session/slug.js";
 export { generateSessionId } from "./session/id.js";
 export { formatSessionName } from "./session/name.js";
+export {
+  isSubagentRequestContent,
+  isSubagentResponseContent,
+} from "./session/types.js";
 
 // Tools
 export { ToolRegistry } from "./tools/registry.js";
