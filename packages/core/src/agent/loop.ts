@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import type { ToolRegistry } from "../tools/registry.js";
+import type { ToolContext } from "../tools/types.js";
 import type { AgentCallbacks, RunResult } from "./types.js";
 
 export interface RunLoopOptions {
@@ -11,10 +12,11 @@ export interface RunLoopOptions {
   tools: ToolRegistry;
   callbacks: AgentCallbacks;
   system?: string;
+  toolContext?: ToolContext;
 }
 
 export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
-  const { client, model, tools, callbacks, system } = options;
+  const { client, model, tools, callbacks, system, toolContext } = options;
   const messages: MessageParam[] = [...options.messages];
   let finalText = "";
   const log = getLogger("loop");
@@ -122,10 +124,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       }
 
       try {
-        // Set callingTool for recursion prevention
-        tools.setCallingTool(toolName);
-        const output = await tool.execute(toolInput);
-        tools.setCallingTool(null);
+        const output = await tool.execute(toolInput, toolContext);
         log.debug("tool result", { tool: toolName, output_len: output.length });
         callbacks.onToolResult?.(toolName, output);
         toolResults.push({
@@ -134,7 +133,6 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
           content: output,
         });
       } catch (err) {
-        tools.setCallingTool(null);
         const message = err instanceof Error ? err.message : String(err);
         log.error("tool error", { tool: toolName, error: message });
         toolResults.push({

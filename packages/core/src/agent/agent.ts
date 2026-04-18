@@ -3,7 +3,7 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
-import type { Tool } from "../tools/types.js";
+import type { Tool, ToolContext } from "../tools/types.js";
 import { detectImages, toContentBlocks } from "./image-input.js";
 import { runLoop } from "./loop.js";
 import { isMultiModel, resolveModelConfig, selectInitialModel } from "./router.js";
@@ -118,12 +118,20 @@ export class Agent {
       messages.push({ role: "user", content: userContent });
 
       // Run the ReAct loop with optional system prompt for subagent tools
+      const toolContext: ToolContext = {
+        sessionId,
+        storage,
+        client: this.client,
+        modelConfig: this.modelConfig,
+      };
+
       const result = await runLoop({
         messages,
         client: this.client,
         model: initialModel,
         tools: this.registry,
         callbacks,
+        toolContext,
         ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
       });
 

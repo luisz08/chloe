@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Message, Session, SessionSummary } from "../session/types.js";
+import type { Message, Session, SessionSummary, SessionTree } from "../session/types.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 
 // ─── Mock @anthropic-ai/sdk ──────────────────────────────────────────────────
@@ -33,7 +33,14 @@ function makeMemoryStorage(): StorageAdapter {
 
   return {
     async createSession(id, name) {
-      const s: Session = { id, name, createdAt: Date.now(), updatedAt: Date.now() };
+      const s: Session = {
+        id,
+        name,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        parentId: null,
+        subagentType: null,
+      };
       sessions.set(id, s);
       return s;
     },
@@ -68,6 +75,41 @@ function makeMemoryStorage(): StorageAdapter {
     },
     async getMessages(sessionId) {
       return msgs.get(sessionId) ?? [];
+    },
+    async createChildSession(parentId, subagentType, title) {
+      const id = `${parentId}-${subagentType}-${Date.now()}`;
+      const s: Session = {
+        id,
+        name: title,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        parentId,
+        subagentType,
+      };
+      sessions.set(id, s);
+      return s;
+    },
+    async getChildSessions(parentId) {
+      return [...sessions.values()]
+        .filter((s) => s.parentId === parentId)
+        .sort((a, b) => a.createdAt - b.createdAt);
+    },
+    async getSessionTree(rootId, maxDepth = 10): Promise<SessionTree> {
+      const root = sessions.get(rootId);
+      if (root === undefined) {
+        throw new Error(`Session not found: ${rootId}`);
+      }
+      const messages = msgs.get(rootId) ?? [];
+      const children = [...sessions.values()]
+        .filter((s) => s.parentId === rootId)
+        .map((child) => this.getSessionTree(child.id, maxDepth - 1));
+      return { session: root, messages, children: await Promise.all(children) };
+    },
+    async listSessionsByType(subagentType) {
+      return [...sessions.values()]
+        .filter((s) => s.subagentType === subagentType)
+        .map((s) => ({ ...s, messageCount: msgs.get(s.id)?.length ?? 0 }))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
     },
   };
 }
