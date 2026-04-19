@@ -1,7 +1,12 @@
 import type { Agent, StorageAdapter } from "@chloe/core";
 import { getLogger } from "@chloe/core";
 import { handlePostMessage } from "./handlers/messages.js";
-import { handleDeleteSession, handleListSessions } from "./handlers/sessions.js";
+import {
+  handleDeleteSession,
+  handleGetChildren,
+  handleGetTree,
+  handleListSessions,
+} from "./handlers/sessions.js";
 
 function jsonError(message: string, status: number): Response {
   return new Response(JSON.stringify({ error: message }), {
@@ -36,7 +41,7 @@ export function createRouter(storage: StorageAdapter, agent: Agent) {
 
     // Routes with /sessions/:id
     const parts = pathname.split("/").filter(Boolean);
-    // parts[0] = "sessions", parts[1] = id, parts[2] = "messages"
+    // parts[0] = "sessions", parts[1] = id, parts[2] = ...
     if (parts[0] === "sessions" && parts[1]) {
       const sessionId = parts[1];
 
@@ -44,6 +49,22 @@ export function createRouter(storage: StorageAdapter, agent: Agent) {
       if (parts[2] === "messages") {
         if (method === "POST") {
           return respond(await handlePostMessage(request, storage, agent, sessionId));
+        }
+        return respond(jsonError("Method not allowed", 405));
+      }
+
+      // GET /sessions/:id/children
+      if (parts[2] === "children") {
+        if (method === "GET") {
+          return respond(await handleGetChildren(request, storage, sessionId));
+        }
+        return respond(jsonError("Method not allowed", 405));
+      }
+
+      // GET /sessions/:id/tree
+      if (parts[2] === "tree") {
+        if (method === "GET") {
+          return respond(await handleGetTree(request, storage, sessionId));
         }
         return respond(jsonError("Method not allowed", 405));
       }

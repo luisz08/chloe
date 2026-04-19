@@ -137,3 +137,200 @@ describe("SQLiteStorageAdapter", () => {
     expect(lastSession?.name).toBe("Only Session");
   });
 });
+
+// ─── Child Session Tests ────────────────────────────────────────────────────────
+
+describe("SQLiteStorageAdapter child sessions", () => {
+  function makeAdapter(): SQLiteStorageAdapter {
+    return new SQLiteStorageAdapter(":memory:");
+  }
+
+  describe("createChildSession", () => {
+    test("should create child session with parent association", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+      const child = await adapter.createChildSession("parent-1", "fast_query", "fast_query: Test");
+
+      expect(child.parentId).toBe("parent-1");
+      expect(child.subagentType).toBe("fast_query");
+      expect(child.id).toContain("parent-1");
+      expect(child.id).toContain("fast_query");
+    });
+
+    test("should generate unique IDs for sequential calls", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+
+      const child1 = await adapter.createChildSession("parent-1", "fast_query", "Query 1");
+      const child2 = await adapter.createChildSession("parent-1", "fast_query", "Query 2");
+
+      expect(child1.id).not.toBe(child2.id);
+    });
+
+    test("should set correct title", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+      const child = await adapter.createChildSession(
+        "parent-1",
+        "vision_analyze",
+        "vision_analyze: Describe image",
+      );
+
+      expect(child.name).toBe("vision_analyze: Describe image");
+    });
+  });
+
+  describe("getChildSessions", () => {
+    test("should return empty array when no children", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+      const children = await adapter.getChildSessions("parent-1");
+
+      expect(children.length).toBe(0);
+    });
+
+    test("should return children in chronological order", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+
+      const child1 = await adapter.createChildSession("parent-1", "fast_query", "Query 1");
+      const child2 = await adapter.createChildSession("parent-1", "vision_analyze", "Vision 2");
+
+      const children = await adapter.getChildSessions("parent-1");
+
+      expect(children.length).toBe(2);
+      expect(children[0]?.id).toBe(child1.id);
+      expect(children[1]?.id).toBe(child2.id);
+    });
+
+    test("should only return direct children", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent Session");
+      const child = await adapter.createChildSession("parent-1", "fast_query", "Child");
+      await adapter.createChildSession(child.id, "vision_analyze", "Grandchild");
+
+      const children = await adapter.getChildSessions("parent-1");
+
+      expect(children.length).toBe(1);
+      expect(children[0]?.id).toBe(child.id);
+    });
+  });
+
+  describe("getSessionTree", () => {
+    test("should throw for non-existent session", async () => {
+      const adapter = makeAdapter();
+      await expect(adapter.getSessionTree("nonexistent")).rejects.toThrow("Session not found");
+    });
+
+    test("should return single-node tree for session without children", async () => {
+      const adapter = makeAdapter();
+      const _session = await adapter.createSession("root-1", "Root Session");
+
+      const tree = await adapter.getSessionTree("root-1");
+
+      expect(tree.session.id).toBe("root-1");
+      expect(tree.children.length).toBe(0);
+      expect(tree.messages.length).toBe(0);
+    });
+
+    test("should return nested tree for multi-level hierarchy", async () => {
+      const adapter = makeAdapter();
+      const _root = await adapter.createSession("root-1", "Root");
+      const child1 = await adapter.createChildSession("root-1", "fast_query", "Child 1");
+      const child2 = await adapter.createChildSession("root-1", "vision_analyze", "Child 2");
+      await adapter.createChildSession(child1.id, "deep_reasoning", "Grandchild");
+
+      const tree = await adapter.getSessionTree("root-1");
+
+      expect(tree.session.id).toBe("root-1");
+      expect(tree.children.length).toBe(2);
+      expect(tree.children[0]?.session.id).toBe(child1.id);
+      expect(tree.children[0]?.children.length).toBe(1);
+      expect(tree.children[1]?.session.id).toBe(child2.id);
+      expect(tree.children[1]?.children.length).toBe(0);
+    });
+
+    test("should include messages in tree nodes", async () => {
+      const adapter = makeAdapter();
+      const _root = await adapter.createSession("root-1", "Root");
+      await adapter.appendMessage("root-1", "user", "Hello");
+      await adapter.appendMessage("root-1", "assistant", "Hi there");
+
+      const tree = await adapter.getSessionTree("root-1");
+
+      expect(tree.messages.length).toBe(2);
+      expect(tree.messages[0]?.role).toBe("user");
+      expect(tree.messages[1]?.role).toBe("assistant");
+    });
+
+    test("should respect maxDepth parameter", async () => {
+      const adapter = makeAdapter();
+      const _root = await adapter.createSession("root-1", "Root");
+      const child = await adapter.createChildSession("root-1", "fast_query", "Child");
+      await adapter.createChildSession(child.id, "vision_analyze", "Grandchild");
+
+      const tree = await adapter.getSessionTree("root-1", 1);
+
+      expect(tree.session.id).toBe("root-1");
+      expect(tree.children.length).toBe(1);
+      expect(tree.children[0]?.children.length).toBe(0); // Grandchild not included due to maxDepth
+    });
+  });
+
+  describe("listSessionsByType", () => {
+    test("should return sessions filtered by type", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent");
+      await adapter.createChildSession("parent-1", "fast_query", "Fast 1");
+      await adapter.createChildSession("parent-1", "vision_analyze", "Vision 1");
+      await adapter.createChildSession("parent-1", "fast_query", "Fast 2");
+
+      const fastSessions = await adapter.listSessionsByType("fast_query");
+
+      expect(fastSessions.length).toBe(2);
+      expect(fastSessions[0]?.subagentType).toBe("fast_query");
+      expect(fastSessions[1]?.subagentType).toBe("fast_query");
+    });
+
+    test("should return empty array for non-existent type", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent");
+      await adapter.createChildSession("parent-1", "fast_query", "Fast");
+
+      const deepSessions = await adapter.listSessionsByType("deep_reasoning");
+
+      expect(deepSessions.length).toBe(0);
+    });
+
+    test("should include message count in summary", async () => {
+      const adapter = makeAdapter();
+      const _parent = await adapter.createSession("parent-1", "Parent");
+      const child = await adapter.createChildSession("parent-1", "fast_query", "Fast");
+      await adapter.appendMessage(child.id, "user", { type: "subagent_request", prompt: "Test" });
+      await adapter.appendMessage(child.id, "assistant", {
+        type: "subagent_response",
+        text: "Response",
+      });
+
+      const sessions = await adapter.listSessionsByType("fast_query");
+
+      expect(sessions[0]?.messageCount).toBe(2);
+    });
+  });
+
+  describe("backward compatibility", () => {
+    test("should work with sessions created before schema extension", async () => {
+      const adapter = makeAdapter();
+      // Create session the old way
+      const session = await adapter.createSession("old-session", "Old Session");
+
+      expect(session.parentId).toBeNull();
+      expect(session.subagentType).toBeNull();
+
+      // Should be able to get it
+      const retrieved = await adapter.getSession("old-session");
+      expect(retrieved?.parentId).toBeNull();
+      expect(retrieved?.subagentType).toBeNull();
+    });
+  });
+});

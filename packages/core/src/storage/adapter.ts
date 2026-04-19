@@ -1,4 +1,4 @@
-import type { Message, Session, SessionSummary } from "../session/types.js";
+import type { Message, Session, SessionSummary, SessionTree } from "../session/types.js";
 
 export interface StorageAdapter {
   createSession(id: string, name: string): Promise<Session>;
@@ -13,4 +13,16 @@ export interface StorageAdapter {
     content: unknown,
   ): Promise<Message>;
   getMessages(sessionId: string): Promise<Message[]>;
+
+  createChildSession(
+    parentId: string,
+    subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+    title: string,
+  ): Promise<Session>;
+
+  getChildSessions(parentId: string): Promise<Session[]>;
+
+  getSessionTree(rootId: string, maxDepth?: number): Promise<SessionTree>;
+
+  listSessionsByType(subagentType: string): Promise<SessionSummary[]>;
 }

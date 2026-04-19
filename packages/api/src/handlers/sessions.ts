@@ -30,3 +30,40 @@ export async function handleDeleteSession(
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function handleGetChildren(
+  _request: Request,
+  storage: StorageAdapter,
+  sessionId: string,
+): Promise<Response> {
+  const children = await storage.getChildSessions(sessionId);
+  return new Response(JSON.stringify(children), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function handleGetTree(
+  request: Request,
+  storage: StorageAdapter,
+  sessionId: string,
+): Promise<Response> {
+  // Parse maxDepth from query params
+  const url = new URL(request.url);
+  const maxDepthParam = url.searchParams.get("maxDepth");
+  const maxDepth = maxDepthParam !== null ? Number.parseInt(maxDepthParam, 10) : 10;
+
+  try {
+    const tree = await storage.getSessionTree(sessionId, maxDepth);
+    return new Response(JSON.stringify(tree), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
