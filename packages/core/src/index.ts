@@ -60,3 +60,7 @@ export { ToolRegistry } from "./tools/registry.js";
 export type { Tool } from "./tools/types.js";
 export { createDefaultTools, loadToolSettings } from "./tools/index.js";
 export type { ToolSettings } from "./tools/index.js";
+
+// Skills
+export { expandArguments, loadSkills, routeCommand } from "./skills/index.js";
+export type { CommandResult, RouterOptions, Skill, SkillSource } from "./skills/index.js";
