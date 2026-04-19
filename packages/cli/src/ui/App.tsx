@@ -1,10 +1,13 @@
 import type { RouterOptions, TurnUsage } from "@chloe/core";
-import { routeCommand } from "@chloe/core";
+import { addRecent, loadRecents, loadSkills, routeCommand, saveRecents } from "@chloe/core";
+import type { Skill } from "@chloe/core";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentHandle } from "../agent-handle.js";
 import { BashPermissionBlock } from "./BashPermissionBlock.js";
 import { ChatView } from "./ChatView.js";
+import { CommandPalette } from "./CommandPalette.js";
+import type { PaletteItem } from "./CommandPalette.js";
 import { InputArea } from "./InputArea.js";
 import { StatusBar } from "./StatusBar.js";
 import type { ChatMessage, ConfirmResult, TokenUsage, UIStatus } from "./types.js";
@@ -18,6 +21,7 @@ interface AppProps {
   initialMessages?: ChatMessage[];
   globalSkillsDir: string;
   projectSkillsDir: string;
+  recentsFilePath: string;
 }
 
 function makeId(): string {
@@ -25,6 +29,11 @@ function makeId(): string {
 }
 
 const BASH_TOOL_NAME = "bash";
+
+const INTERNAL_PALETTE: PaletteItem[] = [
+  { name: "help", description: "Show available commands", isCommand: true },
+  { name: "reload-skills", description: "Reload skills from disk", isCommand: true },
+];
 
 export function App({
   sessionId,
@@ -34,6 +43,7 @@ export function App({
   initialMessages,
   globalSkillsDir,
   projectSkillsDir,
+  recentsFilePath,
 }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -71,6 +81,11 @@ export function App({
   const [sessionAllowedBinaries, setSessionAllowedBinaries] = useState<Set<string>>(new Set());
   const bashPermissionResolveRef = useRef<((allowed: boolean) => void) | null>(null);
 
+  const [skillsCache, setSkillsCache] = useState<Skill[]>([]);
+  const [recentlyUsed, setRecentlyUsed] = useState<string[]>([]);
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const [suppressPalette, setSuppressPalette] = useState(false);
+
   // Streaming buffer — accumulate tokens here, flush to state at 16ms intervals
   const streamingIdRef = useRef<string | null>(null);
   const bufferRef = useRef<string>("");
@@ -88,6 +103,12 @@ export function App({
     }, 16);
     return () => clearInterval(id);
   }, [status]);
+
+  useEffect(() => {
+    const recents = loadRecents(recentsFilePath);
+    setRecentlyUsed(recents);
+    loadSkills(globalSkillsDir, projectSkillsDir).then(setSkillsCache);
+  }, [globalSkillsDir, projectSkillsDir, recentsFilePath]);
 
   const handleUsage = useCallback((usage: TurnUsage) => {
     setTokenUsage((prev) => ({
@@ -123,6 +144,17 @@ export function App({
     [pendingBashBinary],
   );
 
+  const trackRecent = useCallback(
+    (text: string) => {
+      const name = text.trim().slice(1).split(" ")[0]?.toLowerCase();
+      if (!name) return;
+      const updated = addRecent(recentlyUsed, name);
+      setRecentlyUsed(updated);
+      saveRecents(recentsFilePath, updated);
+    },
+    [recentlyUsed, recentsFilePath],
+  );
+
   const handleSubmit = useCallback(
     async (text: string) => {
       if (status !== "idle" || text.trim() === "") return;
@@ -146,6 +178,27 @@ export function App({
           state: "complete",
         };
         setMessages((prev) => [...prev, userMsg, internalMsg]);
+        trackRecent(text);
+        return;
+      }
+
+      if (routeResult.kind === "reload-skills") {
+        const newSkills = await loadSkills(globalSkillsDir, projectSkillsDir);
+        setSkillsCache(newSkills);
+        const userMsg: ChatMessage = {
+          id: makeId(),
+          role: "user",
+          content: text,
+          state: "complete",
+        };
+        const internalMsg: ChatMessage = {
+          id: makeId(),
+          role: "assistant",
+          content: "Skills reloaded.",
+          state: "complete",
+        };
+        setMessages((prev) => [...prev, userMsg, internalMsg]);
+        trackRecent(text);
         return;
       }
 
@@ -250,6 +303,8 @@ export function App({
             m.id === assistantId ? { ...m, content: finalContent, state: "complete" } : m,
           ),
         );
+        trackRecent(text);
+        bufferRef.current = "";
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const errId = makeId();
@@ -273,6 +328,7 @@ export function App({
       confirmBashCommand,
       globalSkillsDir,
       projectSkillsDir,
+      trackRecent,
     ],
   );
 
@@ -313,6 +369,10 @@ export function App({
   const lastCtrlCRef = useRef<number>(0);
   useInput(
     (_input, key) => {
+      if (key.escape) {
+        setSuppressPalette(true);
+        return;
+      }
       if (key.ctrl && _input === "c") {
         const now = Date.now();
         if (exitPrompt && now - lastCtrlCRef.current < 2000) {
@@ -327,6 +387,50 @@ export function App({
     { isActive: true },
   );
 
+  const paletteVisible =
+    !suppressPalette && inputValue.startsWith("/") && !inputValue.slice(1).includes(" ");
+
+  const paletteItems = useMemo((): PaletteItem[] => {
+    if (!paletteVisible) return [];
+    const prefix = inputValue.slice(1).toLowerCase();
+
+    const skillItems: PaletteItem[] = skillsCache.map((s) => ({
+      name: s.name,
+      description: s.description,
+      isCommand: false,
+    }));
+
+    const allItems = [...INTERNAL_PALETTE, ...skillItems];
+    const filtered = allItems.filter((item) => item.name.startsWith(prefix));
+
+    const recentMap = new Map(recentlyUsed.map((n, i) => [n, i]));
+    return filtered.sort((a, b) => {
+      const ra = recentMap.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+      const rb = recentMap.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name);
+    });
+  }, [paletteVisible, inputValue, skillsCache, recentlyUsed]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset selected index whenever item list changes
+  useEffect(() => {
+    setPaletteIndex(0);
+  }, [paletteItems]);
+
+  const handleTabComplete = useCallback(() => {
+    const item = paletteItems[paletteIndex];
+    if (!item) return;
+    setInputValue(`/${item.name} `);
+    setSuppressPalette(false);
+  }, [paletteItems, paletteIndex]);
+
+  const handlePaletteSubmit = useCallback(
+    (name: string) => {
+      handleSubmit(`/${name}`);
+    },
+    [handleSubmit],
+  );
+
   const pendingToolMessage = messages.find((m) => m.role === "tool" && m.state === "pending");
 
   return (
@@ -336,18 +440,33 @@ export function App({
         streamingId={streamingIdRef.current}
         onToolConfirm={handleToolConfirm}
         pendingToolId={pendingToolMessage?.id ?? null}
+        scrollDisabled={paletteItems.length > 0}
       />
       {pendingBashBinary !== null && (
         <BashPermissionBlock binaryName={pendingBashBinary} onResult={handleBashPermission} />
       )}
+      {paletteItems.length > 0 && (
+        <CommandPalette
+          items={paletteItems}
+          selectedIndex={paletteIndex}
+          onSelectedIndexChange={setPaletteIndex}
+          onSubmit={handlePaletteSubmit}
+          isActive={status === "idle"}
+        />
+      )}
       <InputArea
         value={inputValue}
-        onChange={setInputValue}
+        onChange={(v) => {
+          setInputValue(v);
+          setSuppressPalette(false);
+        }}
         onSubmit={handleSubmit}
         disabled={
           status !== "idle" || pendingToolMessage !== undefined || pendingBashBinary !== null
         }
         exitPrompt={exitPrompt}
+        autocompleteActive={paletteItems.length > 0}
+        onTabComplete={handleTabComplete}
       />
       <StatusBar
         sessionId={sessionId}

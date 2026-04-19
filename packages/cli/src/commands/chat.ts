@@ -120,6 +120,7 @@ export async function chatCommand({
 
   const globalSkillsDir = join(homedir(), ".chloe", "skills");
   const projectSkillsDir = join(process.cwd(), ".chloe", "skills");
+  const recentsFilePath = join(homedir(), ".chloe", "skill-recents.json");
 
   const { waitUntilExit } = render(
     React.createElement(App, {
@@ -130,6 +131,7 @@ export async function chatCommand({
       initialMessages,
       globalSkillsDir,
       projectSkillsDir,
+      recentsFilePath,
     }),
     { exitOnCtrlC: false },
   );

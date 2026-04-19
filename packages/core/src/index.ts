@@ -62,5 +62,12 @@ export { createDefaultTools, loadToolSettings } from "./tools/index.js";
 export type { ToolSettings } from "./tools/index.js";
 
 // Skills
-export { expandArguments, loadSkills, routeCommand } from "./skills/index.js";
+export {
+  addRecent,
+  expandArguments,
+  loadRecents,
+  loadSkills,
+  routeCommand,
+  saveRecents,
+} from "./skills/index.js";
 export type { CommandResult, RouterOptions, Skill, SkillSource } from "./skills/index.js";
