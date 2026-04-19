@@ -9,9 +9,16 @@ interface ChatViewProps {
   streamingId: string | null;
   onToolConfirm: (result: ConfirmResult) => void;
   pendingToolId: string | null;
+  scrollDisabled: boolean;
 }
 
-export function ChatView({ messages, streamingId, onToolConfirm, pendingToolId }: ChatViewProps) {
+export function ChatView({
+  messages,
+  streamingId,
+  onToolConfirm,
+  pendingToolId,
+  scrollDisabled,
+}: ChatViewProps) {
   const { stdout } = useStdout();
   const rows = stdout?.rows ?? 24;
   // Reserve rows for input area (~4) and status bar (~1)
@@ -42,7 +49,7 @@ export function ChatView({ messages, streamingId, onToolConfirm, pendingToolId }
         });
       }
     },
-    { isActive: pendingToolId === null },
+    { isActive: pendingToolId === null && !scrollDisabled },
   );
 
   if (messages.length === 0) {
