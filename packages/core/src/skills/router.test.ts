@@ -37,7 +37,10 @@ describe("routeCommand — internal commands", () => {
   });
 
   it("handles /help with no skills defined", async () => {
-    const result = await routeCommand("/help", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/help", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("internal");
     if (result.kind === "internal") {
       expect(result.output).toContain("/help");
@@ -47,7 +50,10 @@ describe("routeCommand — internal commands", () => {
 
   it("/help lists a global skill", async () => {
     writeFileSync(join(globalDir, "greet.md"), "Hello");
-    const result = await routeCommand("/help", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/help", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("internal");
     if (result.kind === "internal") {
       expect(result.output).toContain("/greet");
@@ -57,7 +63,10 @@ describe("routeCommand — internal commands", () => {
 
   it("/help lists a project skill", async () => {
     writeFileSync(join(projectDir, "deploy.md"), "Deploy");
-    const result = await routeCommand("/help", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/help", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("internal");
     if (result.kind === "internal") {
       expect(result.output).toContain("/deploy");
@@ -68,7 +77,10 @@ describe("routeCommand — internal commands", () => {
   it("/help marks overridden global skills", async () => {
     writeFileSync(join(globalDir, "greet.md"), "Global");
     writeFileSync(join(projectDir, "greet.md"), "Project");
-    const result = await routeCommand("/help", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/help", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("internal");
     if (result.kind === "internal") {
       expect(result.output).toContain("overrides global");
@@ -92,7 +104,10 @@ describe("routeCommand — skill expansion", () => {
 
   it("expands skill with $ARGUMENTS substituted", async () => {
     writeFileSync(join(globalDir, "greet.md"), "Hello $ARGUMENTS");
-    const result = await routeCommand("/greet world", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/greet world", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("skill");
     if (result.kind === "skill") {
       expect(result.expandedContent).toBe("Hello world");
@@ -101,7 +116,10 @@ describe("routeCommand — skill expansion", () => {
 
   it("sends skill content verbatim when no $ARGUMENTS and no args given", async () => {
     writeFileSync(join(globalDir, "deploy.md"), "Deploy now");
-    const result = await routeCommand("/deploy", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/deploy", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("skill");
     if (result.kind === "skill") {
       expect(result.expandedContent).toBe("Deploy now");
@@ -111,7 +129,10 @@ describe("routeCommand — skill expansion", () => {
   it("project skill takes precedence over global skill", async () => {
     writeFileSync(join(globalDir, "greet.md"), "Global greet $ARGUMENTS");
     writeFileSync(join(projectDir, "greet.md"), "Project greet $ARGUMENTS");
-    const result = await routeCommand("/greet world", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/greet world", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("skill");
     if (result.kind === "skill") {
       expect(result.expandedContent).toBe("Project greet world");
@@ -120,7 +141,10 @@ describe("routeCommand — skill expansion", () => {
 
   it("returns error for empty skill file", async () => {
     writeFileSync(join(globalDir, "empty.md"), "");
-    const result = await routeCommand("/empty", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/empty", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("error");
     if (result.kind === "error") {
       expect(result.message).toContain("empty");
@@ -129,7 +153,10 @@ describe("routeCommand — skill expansion", () => {
 
   it("lookup is case-insensitive — /Greet resolves to greet.md", async () => {
     writeFileSync(join(globalDir, "greet.md"), "Hello $ARGUMENTS");
-    const result = await routeCommand("/Greet world", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/Greet world", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("skill");
   });
 });
@@ -149,7 +176,10 @@ describe("routeCommand — unknown command", () => {
   });
 
   it("returns error for unknown command", async () => {
-    const result = await routeCommand("/nonexistent", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/nonexistent", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("error");
     if (result.kind === "error") {
       expect(result.message).toBe("Unknown command: /nonexistent");
@@ -157,7 +187,10 @@ describe("routeCommand — unknown command", () => {
   });
 
   it("returns error for bare slash", async () => {
-    const result = await routeCommand("/", { globalSkillsDir: globalDir, projectSkillsDir: projectDir });
+    const result = await routeCommand("/", {
+      globalSkillsDir: globalDir,
+      projectSkillsDir: projectDir,
+    });
     expect(result.kind).toBe("error");
     if (result.kind === "error") {
       expect(result.message).toContain("Unknown command");
