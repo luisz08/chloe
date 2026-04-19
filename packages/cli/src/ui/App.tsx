@@ -1,4 +1,5 @@
-import type { TurnUsage } from "@chloe/core";
+import type { RouterOptions, TurnUsage } from "@chloe/core";
+import { routeCommand } from "@chloe/core";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentHandle } from "../agent-handle.js";
@@ -15,6 +16,8 @@ interface AppProps {
   autoConfirm: boolean;
   agent: AgentHandle;
   initialMessages?: ChatMessage[];
+  globalSkillsDir: string;
+  projectSkillsDir: string;
 }
 
 function makeId(): string {
@@ -23,7 +26,15 @@ function makeId(): string {
 
 const BASH_TOOL_NAME = "bash";
 
-export function App({ sessionId, modelName, autoConfirm, agent, initialMessages }: AppProps) {
+export function App({
+  sessionId,
+  modelName,
+  autoConfirm,
+  agent,
+  initialMessages,
+  globalSkillsDir,
+  projectSkillsDir,
+}: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const contextLimit = getContextLimit(modelName);
@@ -117,6 +128,47 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
       if (status !== "idle" || text.trim() === "") return;
       setExitPrompt(false);
 
+      const routerOpts: RouterOptions = { globalSkillsDir, projectSkillsDir };
+      const routeResult = await routeCommand(text, routerOpts);
+
+      if (routeResult.kind === "internal") {
+        const internalId = makeId();
+        const userMsg: ChatMessage = {
+          id: makeId(),
+          role: "user",
+          content: text,
+          state: "complete",
+        };
+        const internalMsg: ChatMessage = {
+          id: internalId,
+          role: "assistant",
+          content: routeResult.output,
+          state: "complete",
+        };
+        setMessages((prev) => [...prev, userMsg, internalMsg]);
+        return;
+      }
+
+      if (routeResult.kind === "error") {
+        const errId = makeId();
+        const userMsg: ChatMessage = {
+          id: makeId(),
+          role: "user",
+          content: text,
+          state: "complete",
+        };
+        const errMsg: ChatMessage = {
+          id: errId,
+          role: "assistant",
+          content: routeResult.message,
+          state: "complete",
+        };
+        setMessages((prev) => [...prev, userMsg, errMsg]);
+        return;
+      }
+
+      const messageToSend = routeResult.kind === "skill" ? routeResult.expandedContent : text;
+
       const userMsg: ChatMessage = {
         id: makeId(),
         role: "user",
@@ -139,7 +191,7 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
       setStatus("thinking");
 
       try {
-        await agent.run(sessionId, text, {
+        await agent.run(sessionId, messageToSend, {
           onToken: (tok: string) => {
             setStatus("streaming");
             bufferRef.current += tok;
@@ -211,7 +263,17 @@ export function App({ sessionId, modelName, autoConfirm, agent, initialMessages 
         setStatus("idle");
       }
     },
-    [status, sessionId, agent, autoConfirm, handleUsage, sessionAllowedTools, confirmBashCommand],
+    [
+      status,
+      sessionId,
+      agent,
+      autoConfirm,
+      handleUsage,
+      sessionAllowedTools,
+      confirmBashCommand,
+      globalSkillsDir,
+      projectSkillsDir,
+    ],
   );
 
   const handleToolConfirm = useCallback(
