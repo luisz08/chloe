@@ -7,9 +7,19 @@ interface InputAreaProps {
   onSubmit: (v: string) => void;
   disabled: boolean;
   exitPrompt: boolean;
+  autocompleteActive: boolean;
+  onTabComplete: () => void;
 }
 
-export function InputArea({ value, onChange, onSubmit, disabled, exitPrompt }: InputAreaProps) {
+export function InputArea({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  exitPrompt,
+  autocompleteActive,
+  onTabComplete,
+}: InputAreaProps) {
   const { stdout } = useStdout();
   const cols = stdout?.columns ?? 80;
 
@@ -66,6 +76,13 @@ export function InputArea({ value, onChange, onSubmit, disabled, exitPrompt }: I
 
       if (key.rightArrow) {
         setCursor(Math.min(value.length, cursor + 1));
+        return;
+      }
+
+      if (key.tab) {
+        if (autocompleteActive) {
+          onTabComplete();
+        }
         return;
       }
 
