@@ -390,6 +390,14 @@ export function App({
   const paletteVisible =
     !suppressPalette && inputValue.startsWith("/") && !inputValue.slice(1).includes(" ");
 
+  const typedCommandName = inputValue.startsWith("/")
+    ? (inputValue.slice(1).split(" ")[0]?.toLowerCase() ?? "")
+    : "";
+  const commandValid =
+    typedCommandName !== "" &&
+    (INTERNAL_PALETTE.some((c) => c.name === typedCommandName) ||
+      skillsCache.some((s) => s.name === typedCommandName));
+
   const paletteItems = useMemo((): PaletteItem[] => {
     if (!paletteVisible) return [];
     const prefix = inputValue.slice(1).toLowerCase();
@@ -467,6 +475,7 @@ export function App({
         exitPrompt={exitPrompt}
         autocompleteActive={paletteItems.length > 0}
         onTabComplete={handleTabComplete}
+        commandValid={commandValid}
       />
       <StatusBar
         sessionId={sessionId}
