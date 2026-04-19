@@ -161,6 +161,16 @@ describe("routeCommand — skill expansion", () => {
   });
 });
 
+describe("routeCommand — reload-skills", () => {
+  it("returns reload-skills kind for /reload-skills", async () => {
+    const result = await routeCommand("/reload-skills", {
+      globalSkillsDir: "",
+      projectSkillsDir: "",
+    });
+    expect(result.kind).toBe("reload-skills");
+  });
+});
+
 describe("routeCommand — unknown command", () => {
   let globalDir: string;
   let projectDir: string;

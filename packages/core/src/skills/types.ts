@@ -10,5 +10,6 @@ export interface Skill {
 export type CommandResult =
   | { kind: "skill"; expandedContent: string }
   | { kind: "internal"; output: string }
+  | { kind: "reload-skills" }
   | { kind: "error"; message: string }
   | { kind: "passthrough" };

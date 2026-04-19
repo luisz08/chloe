@@ -37,7 +37,7 @@ async function buildHelpOutput(opts: RouterOptions): Promise<string> {
   return lines.join("\n");
 }
 
-const INTERNAL_COMMANDS = new Set(["help"]);
+const INTERNAL_COMMANDS = new Set(["help", "reload-skills"]);
 
 export async function routeCommand(input: string, opts: RouterOptions): Promise<CommandResult> {
   if (!input.startsWith("/")) {
@@ -52,6 +52,10 @@ export async function routeCommand(input: string, opts: RouterOptions): Promise<
 
   if (name === "") {
     return { kind: "error", message: "Unknown command: /" };
+  }
+
+  if (name === "reload-skills") {
+    return { kind: "reload-skills" };
   }
 
   if (INTERNAL_COMMANDS.has(name)) {
