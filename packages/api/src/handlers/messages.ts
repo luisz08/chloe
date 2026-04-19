@@ -1,5 +1,9 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Agent } from "@chloe/core";
 import type { StorageAdapter } from "@chloe/core";
+import { routeCommand } from "@chloe/core";
+import type { RouterOptions } from "@chloe/core";
 
 export async function handlePostMessage(
   request: Request,
@@ -25,11 +29,34 @@ export async function handlePostMessage(
     });
   }
 
+  const opts: RouterOptions = {
+    globalSkillsDir: join(homedir(), ".chloe", "skills"),
+    projectSkillsDir: join(process.cwd(), ".chloe", "skills"),
+  };
+
+  const routeResult = await routeCommand(content, opts);
+
+  if (routeResult.kind === "internal") {
+    return new Response(routeResult.output, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  if (routeResult.kind === "error") {
+    return new Response(JSON.stringify({ error: routeResult.message }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const messageContent = routeResult.kind === "skill" ? routeResult.expandedContent : content;
+
   const stream = new ReadableStream({
     async start(controller) {
       const encode = (chunk: string) => new TextEncoder().encode(chunk);
       try {
-        await agent.run(sessionId, content, {
+        await agent.run(sessionId, messageContent, {
           onToken: (text) =>
             controller.enqueue(encode(`data: ${JSON.stringify({ type: "token", text })}\n\n`)),
           onToolCall: (name, input) =>
