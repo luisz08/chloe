@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { AgentCallbacks, ResolvedModelConfig } from "@chloe/core";
 import {
   SQLiteStorageAdapter,
@@ -116,6 +118,9 @@ export async function chatCommand({
     },
   };
 
+  const globalSkillsDir = join(homedir(), ".chloe", "skills");
+  const projectSkillsDir = join(process.cwd(), ".chloe", "skills");
+
   const { waitUntilExit } = render(
     React.createElement(App, {
       sessionId,
@@ -123,6 +128,8 @@ export async function chatCommand({
       autoConfirm: yes ?? false,
       agent,
       initialMessages,
+      globalSkillsDir,
+      projectSkillsDir,
     }),
     { exitOnCtrlC: false },
   );
