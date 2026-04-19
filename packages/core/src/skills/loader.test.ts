@@ -90,6 +90,47 @@ describe("loadSkills", () => {
   });
 });
 
+describe("loadSkills — description extraction", () => {
+  let globalDir: string;
+  let projectDir: string;
+
+  beforeEach(() => {
+    globalDir = makeTmpDir();
+    projectDir = makeTmpDir();
+  });
+  afterEach(() => {
+    rmSync(globalDir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it("extracts description from frontmatter", async () => {
+    writeFileSync(
+      join(globalDir, "greet.md"),
+      "---\ndescription: Say hello\n---\nHello $ARGUMENTS",
+    );
+    const skills = await loadSkills(globalDir, projectDir);
+    expect(skills[0]?.description).toBe("Say hello");
+  });
+
+  it("falls back to first non-empty non-separator line when no frontmatter", async () => {
+    writeFileSync(join(globalDir, "deploy.md"), "Deploy the app now");
+    const skills = await loadSkills(globalDir, projectDir);
+    expect(skills[0]?.description).toBe("Deploy the app now");
+  });
+
+  it("skips --- separator lines when no frontmatter description field", async () => {
+    writeFileSync(join(globalDir, "deploy.md"), "---\ntitle: foo\n---\nDeploy now");
+    const skills = await loadSkills(globalDir, projectDir);
+    expect(skills[0]?.description).toBe("Deploy now");
+  });
+
+  it("returns (no description) for empty skill file", async () => {
+    writeFileSync(join(globalDir, "empty.md"), "   ");
+    const skills = await loadSkills(globalDir, projectDir);
+    expect(skills[0]?.description).toBe("(no description)");
+  });
+});
+
 describe("expandArguments", () => {
   it("replaces $ARGUMENTS with the provided string", () => {
     expect(expandArguments("Hello $ARGUMENTS", "world")).toBe("Hello world");

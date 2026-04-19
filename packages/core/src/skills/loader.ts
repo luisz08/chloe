@@ -4,6 +4,28 @@ import type { Skill, SkillSource } from "./types.js";
 
 const VALID_SKILL_NAME = /^[a-z0-9_-]+\.md$/;
 
+function extractDescription(content: string): string {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() === "---") {
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i]?.trim() === "---") {
+        // Past frontmatter — find first non-empty line
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j]?.trim()) return lines[j]?.trim() ?? "(no description)";
+        }
+        return "(no description)";
+      }
+      const match = lines[i]?.match(/^description:\s*(.+)$/);
+      if (match) return match[1]?.trim() ?? "(no description)";
+    }
+    return "(no description)";
+  }
+  for (const line of lines) {
+    if (line.trim()) return line.trim();
+  }
+  return "(no description)";
+}
+
 function loadSkillsFromDir(dir: string, source: SkillSource): Map<string, Skill> {
   const skills = new Map<string, Skill>();
   if (!existsSync(dir)) return skills;
@@ -11,7 +33,7 @@ function loadSkillsFromDir(dir: string, source: SkillSource): Map<string, Skill>
     if (!VALID_SKILL_NAME.test(file)) continue;
     const name = file.slice(0, -3);
     const content = readFileSync(join(dir, file), "utf8");
-    skills.set(name, { name, content, source });
+    skills.set(name, { name, content, source, description: extractDescription(content) });
   }
   return skills;
 }

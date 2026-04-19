@@ -4,6 +4,7 @@ export interface Skill {
   name: string;
   content: string;
   source: SkillSource;
+  description: string;
 }
 
 export type CommandResult =
