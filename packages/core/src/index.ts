@@ -67,7 +67,40 @@ export {
   expandArguments,
   loadRecents,
   loadSkills,
+  mergePluginSkills,
   routeCommand,
   saveRecents,
 } from "./skills/index.js";
 export type { CommandResult, RouterOptions, Skill, SkillSource } from "./skills/index.js";
+
+// Plugins
+export type {
+  HookContext,
+  HookEntry,
+  HookEvent,
+  InstalledPluginRecord,
+  LoadedPlugin,
+  MarketplaceManifest,
+  MarketplacePluginEntry,
+  MarketplaceRecord,
+  MarketplaceSource,
+  PluginManifest,
+  PluginSkill,
+  PluginSourceSpec,
+} from "./plugins/index.js";
+export {
+  discoverSkills,
+  HookRegistry,
+  loadHooks,
+  loadInstalledPlugins,
+  loadPlugin,
+  marketplaceCloneDir,
+  pluginCacheDir,
+  readInstalled,
+  readMarketplaceManifest,
+  readMarketplaces,
+  readPluginManifest,
+  validateMarketplaceManifest,
+  writeInstalled,
+  writeMarketplaces,
+} from "./plugins/index.js";

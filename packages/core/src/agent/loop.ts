@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
+import type { HookRegistry } from "../plugins/hooks.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { ToolContext } from "../tools/types.js";
 import type { AgentCallbacks, RunResult } from "./types.js";
@@ -13,10 +14,11 @@ export interface RunLoopOptions {
   callbacks: AgentCallbacks;
   system?: string;
   toolContext?: ToolContext;
+  hookRegistry?: HookRegistry;
 }
 
 export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
-  const { client, model, tools, callbacks, system, toolContext } = options;
+  const { client, model, tools, callbacks, system, toolContext, hookRegistry } = options;
   const messages: MessageParam[] = [...options.messages];
   let finalText = "";
   const log = getLogger("loop");
@@ -124,7 +126,19 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       }
 
       try {
+        void hookRegistry?.fire("PreToolUse", {
+          event: "PreToolUse",
+          toolName,
+          sessionId: toolContext?.sessionId ?? "",
+          pluginRoot: "",
+        });
         const output = await tool.execute(toolInput, toolContext);
+        void hookRegistry?.fire("PostToolUse", {
+          event: "PostToolUse",
+          toolName,
+          sessionId: toolContext?.sessionId ?? "",
+          pluginRoot: "",
+        });
         log.debug("tool result", { tool: toolName, output_len: output.length });
         callbacks.onToolResult?.(toolName, output);
         toolResults.push({
