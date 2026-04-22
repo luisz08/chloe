@@ -25,4 +25,7 @@ export interface StorageAdapter {
   getSessionTree(rootId: string, maxDepth?: number): Promise<SessionTree>;
 
   listSessionsByType(subagentType: string): Promise<SessionSummary[]>;
+
+  getSessionSummary(id: string): Promise<string | null>;
+  setSessionSummary(id: string, summary: string): Promise<void>;
 }

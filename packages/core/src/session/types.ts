@@ -5,6 +5,7 @@ export interface Session {
   updatedAt: number;
   parentId: string | null;
   subagentType: string | null;
+  summary: string | null;
 }
 
 export interface SessionSummary extends Session {
