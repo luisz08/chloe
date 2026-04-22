@@ -6,7 +6,7 @@
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: User story tag (US1, US2, US3, FOUND)
+- **[Story]**: User story tag (US1, US2, US3, US4, FOUND)
 - Exact file paths included in all task descriptions
 
 ---
@@ -104,17 +104,6 @@
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
-
-- [ ] T022 [P] Add `ContextTooLargeError` handling in `packages/cli/src/ui/App.tsx` `handleSubmit` catch block — display a specific user-facing error message distinct from generic errors
-- [ ] T023 [P] Validate `contextCompression.threshold` (must be 0 < x < 1) and `keepRecentCount` (must be ≥ 1) in `packages/core/src/config.ts`; revert to defaults with a warning log if invalid
-- [ ] T024 [P] Add `contextCompression` config to `AgentConfig` wiring in `packages/cli/src/commands/chat.ts` (line ~107 where `createAgent()` is called) and in `packages/api/src/router.ts`
-- [ ] T025 Run full test suite: `bun test` — all tests must pass
-- [ ] T026 Run Biome: `bunx biome check --error-on-warnings .` — zero warnings/errors
-- [ ] T027 Run type check: `bunx tsc --noEmit -p tsconfig.check.json` — zero errors
-
----
-
 ## Phase 5b: User Story 4 - Manual `/compact` Command (Priority: P4)
 
 **Goal**: Users can type `/compact` to proactively compress their session at any time.
@@ -123,7 +112,7 @@
 
 ### Tests for User Story 4
 
-> **Write tests FIRST; ensure they FAIL before implementing T029**
+> **Write tests FIRST; ensure they FAIL before implementing T030**
 
 - [ ] T028 [P] [US4] Unit test: `Agent.forceCompress()` with a mocked client calls `compressIfNeeded` with `threshold: 0` and persists the summary — in `packages/core/src/agent/agent.test.ts`
 - [ ] T029 [P] [US4] Unit test: `Agent.forceCompress()` on a session with zero messages returns without error and does not call the API — in `packages/core/src/agent/agent.test.ts`
@@ -135,6 +124,17 @@
 - [ ] T032 [US4] Add `/compact` to `INTERNAL_PALETTE` in `packages/cli/src/ui/App.tsx` so it appears in the slash-command autocomplete (depends on T031)
 
 **Checkpoint**: All four user stories complete.
+
+---
+
+## Phase 6: Polish & Cross-Cutting Concerns
+
+- [ ] T022 [P] Add `ContextTooLargeError` handling in `packages/cli/src/ui/App.tsx` `handleSubmit` catch block — display a specific user-facing error message distinct from generic errors
+- [ ] T023 [P] Validate `contextCompression.threshold` (must be 0 < x < 1) and `keepRecentCount` (must be ≥ 1) in `packages/core/src/config.ts`; revert to defaults with a warning log if invalid
+- [ ] T024 [P] Add `contextCompression` config to `AgentConfig` wiring in `packages/cli/src/commands/chat.ts` (line ~107 where `createAgent()` is called) and in `packages/api/src/router.ts`
+- [ ] T025 Run full test suite: `bun test` — all tests must pass
+- [ ] T026 Run Biome: `bunx biome check --error-on-warnings .` — zero warnings/errors
+- [ ] T027 Run type check: `bunx tsc --noEmit -p tsconfig.check.json` — zero errors
 
 ---
 
