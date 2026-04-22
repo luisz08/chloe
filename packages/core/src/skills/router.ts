@@ -21,51 +21,62 @@ export interface RouterOptions {
   projectSkillsDir: string;
 }
 
+function skillLine(name: string, description: string, tag?: string): string {
+  const desc = description || "(no description)";
+  const suffix = tag ? ` *(${tag})*` : "";
+  return `- \`/${name}\` : ${desc}${suffix}`;
+}
+
 async function buildHelpOutput(opts: RouterOptions): Promise<string> {
-  const lines: string[] = ["Available commands:", "  /help    Show this help message", ""];
+  const sections: string[] = [];
+
+  sections.push("**Available commands:**");
+  sections.push("- `/help` : Show this help message");
+  sections.push("- `/reload-skills` : Reload skills from disk");
 
   const globalSkills = await loadSkills(opts.globalSkillsDir, "");
   const projectSkills = await loadSkills("", opts.projectSkillsDir);
   const globalNames = new Set(globalSkills.map((s) => s.name));
 
   if (globalSkills.length > 0) {
-    lines.push(`Skills (global: ${opts.globalSkillsDir}):`);
+    sections.push("\n**Skills (global):**");
     for (const s of globalSkills) {
-      lines.push(`  /${s.name}`);
+      sections.push(skillLine(s.name, s.description));
     }
-    lines.push("");
   }
 
   if (projectSkills.length > 0) {
-    lines.push(`Skills (project: ${opts.projectSkillsDir}):`);
+    sections.push("\n**Skills (project):**");
     for (const s of projectSkills) {
-      const override = globalNames.has(s.name) ? "  [overrides global]" : "";
-      lines.push(`  /${s.name}${override}`);
+      const tag = globalNames.has(s.name) ? "overrides global" : undefined;
+      sections.push(skillLine(s.name, s.description, tag));
     }
-    lines.push("");
   }
 
-  if (globalSkills.length === 0 && projectSkills.length === 0) {
-    lines.push("No skills defined.");
+  const plugins = await loadInstalledPlugins();
+  const pluginSkills = plugins.flatMap((p) => p.skills);
+  if (pluginSkills.length > 0) {
+    sections.push("\n**Skills (plugins):**");
+    for (const s of pluginSkills) {
+      sections.push(skillLine(s.name, s.description, s.pluginId));
+    }
   }
 
-  return lines.join("\n");
+  sections.push("\n**Plugin management:**");
+  sections.push("- `/plugin list` : List installed plugins");
+  sections.push("- `/plugin install <name@marketplace>` : Install a plugin");
+  sections.push("- `/plugin uninstall <name@marketplace>` : Remove a plugin");
+  sections.push("- `/plugin enable <name@marketplace>` : Enable a plugin");
+  sections.push("- `/plugin disable <name@marketplace>` : Disable a plugin");
+  sections.push("- `/plugin update <name@marketplace>` : Update a plugin");
+  sections.push("- `/plugin marketplace list` : List registered marketplaces");
+  sections.push("- `/plugin marketplace add --from-dir <path>` : Add local marketplace");
+  sections.push("- `/plugin marketplace add <owner/repo>` : Add GitHub marketplace");
+  sections.push("- `/plugin marketplace remove <name>` : Remove a marketplace");
+  sections.push("- `/plugin marketplace update [name]` : Update marketplace(s)");
+
+  return sections.join("\n");
 }
-
-const PLUGIN_HELP = [
-  "Plugin commands:",
-  "  /plugin marketplace add <owner/repo>",
-  "  /plugin marketplace add --from-dir <path>",
-  "  /plugin marketplace list",
-  "  /plugin marketplace remove <name>",
-  "  /plugin marketplace update [name]",
-  "  /plugin install <name@marketplace>",
-  "  /plugin uninstall <name@marketplace>",
-  "  /plugin list",
-  "  /plugin enable <name@marketplace>",
-  "  /plugin disable <name@marketplace>",
-  "  /plugin update <name@marketplace>",
-].join("\n");
 
 function parsePluginSpec(spec: string): { name: string; marketplace: string } {
   const atIdx = spec.lastIndexOf("@");
@@ -178,7 +189,7 @@ async function handlePluginSlashCommand(args: string): Promise<string> {
     return `Updated: ${spec}`;
   }
 
-  return PLUGIN_HELP;
+  return `Unknown subcommand: ${sub}\nRun \`/help\` to see available plugin commands.`;
 }
 
 const INTERNAL_COMMANDS = new Set(["help", "reload-skills"]);

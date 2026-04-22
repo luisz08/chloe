@@ -37,3 +37,6 @@ coverage/
 .specify/spec.md
 
 .chloe/
+
+# Plugin system test fixture
+specs/013-plugin-system/test-marketplace/
