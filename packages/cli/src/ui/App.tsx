@@ -1,5 +1,13 @@
-import type { RouterOptions, TurnUsage } from "@chloe/core";
-import { addRecent, loadRecents, loadSkills, routeCommand, saveRecents } from "@chloe/core";
+import type { HookRegistry, RouterOptions, TurnUsage } from "@chloe/core";
+import {
+  addRecent,
+  loadInstalledPlugins,
+  loadRecents,
+  loadSkills,
+  mergePluginSkills,
+  routeCommand,
+  saveRecents,
+} from "@chloe/core";
 import type { Skill } from "@chloe/core";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +30,7 @@ interface AppProps {
   globalSkillsDir: string;
   projectSkillsDir: string;
   recentsFilePath: string;
+  hookRegistry?: HookRegistry;
 }
 
 function makeId(): string {
@@ -44,6 +53,7 @@ export function App({
   globalSkillsDir,
   projectSkillsDir,
   recentsFilePath,
+  hookRegistry,
 }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -107,7 +117,11 @@ export function App({
   useEffect(() => {
     const recents = loadRecents(recentsFilePath);
     setRecentlyUsed(recents);
-    loadSkills(globalSkillsDir, projectSkillsDir).then(setSkillsCache);
+    loadSkills(globalSkillsDir, projectSkillsDir).then(async (skills) => {
+      const plugins = await loadInstalledPlugins();
+      const pluginSkills = plugins.flatMap((p) => p.skills);
+      setSkillsCache(mergePluginSkills(skills, pluginSkills));
+    });
   }, [globalSkillsDir, projectSkillsDir, recentsFilePath]);
 
   const handleUsage = useCallback((usage: TurnUsage) => {
@@ -160,6 +174,12 @@ export function App({
       if (status !== "idle" || text.trim() === "") return;
       setExitPrompt(false);
 
+      void hookRegistry?.fire("UserPromptSubmit", {
+        event: "UserPromptSubmit",
+        sessionId,
+        pluginRoot: "",
+      });
+
       const routerOpts: RouterOptions = { globalSkillsDir, projectSkillsDir };
       const routeResult = await routeCommand(text, routerOpts);
 
@@ -184,7 +204,9 @@ export function App({
 
       if (routeResult.kind === "reload-skills") {
         const newSkills = await loadSkills(globalSkillsDir, projectSkillsDir);
-        setSkillsCache(newSkills);
+        const plugins = await loadInstalledPlugins();
+        const pluginSkills = plugins.flatMap((p) => p.skills);
+        setSkillsCache(mergePluginSkills(newSkills, pluginSkills));
         const userMsg: ChatMessage = {
           id: makeId(),
           role: "user",
@@ -329,6 +351,7 @@ export function App({
       globalSkillsDir,
       projectSkillsDir,
       trackRecent,
+      hookRegistry,
     ],
   );
 

@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
+import { HookRegistry } from "../plugins/hooks.js";
+import { loadInstalledPlugins } from "../plugins/loader.js";
 import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { Tool, ToolContext } from "../tools/types.js";
@@ -36,12 +38,15 @@ export class Agent {
   private readonly registry: ToolRegistry;
   private readonly bashPermissionRef: { current: ((bin: string) => Promise<boolean>) | null };
   private readonly subagentPromptActive: boolean;
+  readonly hookRegistry: HookRegistry;
+  private pluginInitPromise: Promise<void> | null = null;
 
   constructor(config: AgentConfig) {
     this.config = config;
     this.client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseURL });
     this.registry = new ToolRegistry();
     this.bashPermissionRef = { current: null };
+    this.hookRegistry = new HookRegistry();
 
     // Use provided modelConfig or create from model string
     this.modelConfig = config.modelConfig ?? resolveModelConfig({ defaultModel: config.model });
@@ -97,8 +102,20 @@ export class Agent {
 
     this.bashPermissionRef.current = callbacks.confirmBashCommand ?? null;
     try {
+      if (!this.pluginInitPromise) {
+        this.pluginInitPromise = loadInstalledPlugins().then((plugins) => {
+          this.hookRegistry.registerAll(plugins.flatMap((p) => p.hooks));
+        });
+      }
+      await this.pluginInitPromise;
+
       // Ensure session exists
       let session = await storage.getSession(sessionId);
+      void this.hookRegistry.fire("SessionStart", {
+        event: "SessionStart",
+        sessionId,
+        pluginRoot: "",
+      });
       if (session === null) {
         session = await storage.createSession(sessionId, sessionId);
       }
@@ -132,6 +149,7 @@ export class Agent {
         tools: this.registry,
         callbacks,
         toolContext,
+        hookRegistry: this.hookRegistry,
         ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
       });
 
@@ -151,6 +169,11 @@ export class Agent {
       log.error("run failed", { session: sessionId, error });
       throw err;
     } finally {
+      void this.hookRegistry.fire("SessionEnd", {
+        event: "SessionEnd",
+        sessionId,
+        pluginRoot: "",
+      });
       this.bashPermissionRef.current = null;
     }
   }

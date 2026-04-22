@@ -1,4 +1,4 @@
-export type SkillSource = "global" | "project";
+export type SkillSource = "global" | "project" | "plugin";
 
 export interface Skill {
   name: string;
