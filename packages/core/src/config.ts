@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse, stringify } from "smol-toml";
+import { getLogger } from "./logger/index.js";
 import type { LoggingConfig } from "./logger/types.js";
 
 export interface ProviderConfig {
@@ -20,10 +21,16 @@ export interface StorageConfig {
 
 export type { LoggingConfig };
 
+export interface ContextCompressionConfig {
+  threshold: number;
+  keepRecentCount: number;
+}
+
 export interface ChloeConfig {
   provider: ProviderConfig;
   storage: StorageConfig;
   logging: LoggingConfig;
+  contextCompression: ContextCompressionConfig;
 }
 
 export const CONFIG_PATH = join(homedir(), ".chloe", "settings", "config.toml");
@@ -38,6 +45,8 @@ const DEFAULTS = {
   logLevel: "info",
   logMaxSizeMb: 10,
   logMaxDays: 7,
+  contextCompressionThreshold: 0.75,
+  contextCompressionKeepRecent: 20,
 } as const;
 
 export function expandHome(p: string): string {
@@ -94,12 +103,14 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
   let fileProvider: Record<string, unknown> = {};
   let fileStorage: Record<string, unknown> = {};
   let fileLogging: Record<string, unknown> = {};
+  let fileContextCompression: Record<string, unknown> = {};
 
   if (existsSync(configPath)) {
     const raw = readTomlFile(configPath);
     fileProvider = section(raw, "provider");
     fileStorage = section(raw, "storage");
     fileLogging = section(raw, "logging");
+    fileContextCompression = section(raw, "context_compression");
   }
 
   // Merge: env var > file value > built-in default
@@ -129,6 +140,41 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
   const maxSizeMb = num(fileLogging.max_size_mb) ?? DEFAULTS.logMaxSizeMb;
   const maxDays = num(fileLogging.max_days) ?? DEFAULTS.logMaxDays;
 
+  // Context compression config: env > file > default
+  const envThresholdRaw = process.env.CHLOE_CONTEXT_COMPRESSION_THRESHOLD;
+  const envThreshold =
+    envThresholdRaw !== undefined && envThresholdRaw !== ""
+      ? Number.parseFloat(envThresholdRaw)
+      : undefined;
+  const envKeepRaw = process.env.CHLOE_CONTEXT_COMPRESSION_KEEP_RECENT;
+  const envKeep =
+    envKeepRaw !== undefined && envKeepRaw !== "" ? Number.parseInt(envKeepRaw, 10) : undefined;
+
+  let threshold =
+    (envThreshold !== undefined && Number.isFinite(envThreshold) ? envThreshold : undefined) ??
+    num(fileContextCompression.threshold) ??
+    DEFAULTS.contextCompressionThreshold;
+  let keepRecentCount =
+    (envKeep !== undefined && Number.isFinite(envKeep) ? envKeep : undefined) ??
+    num(fileContextCompression.keep_recent_count) ??
+    DEFAULTS.contextCompressionKeepRecent;
+
+  const log = getLogger("config");
+  if (threshold <= 0 || threshold >= 1) {
+    log.warn("Invalid context_compression.threshold; falling back to default", {
+      provided: threshold,
+      fallback: DEFAULTS.contextCompressionThreshold,
+    });
+    threshold = DEFAULTS.contextCompressionThreshold;
+  }
+  if (keepRecentCount < 1) {
+    log.warn("Invalid context_compression.keep_recent_count; falling back to default", {
+      provided: keepRecentCount,
+      fallback: DEFAULTS.contextCompressionKeepRecent,
+    });
+    keepRecentCount = DEFAULTS.contextCompressionKeepRecent;
+  }
+
   // Ensure sessions directory exists (covers fresh installs too)
   mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -147,6 +193,7 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
     },
     storage: { dbPath },
     logging: { logDir, level: logLevel, maxSizeMb, maxDays },
+    contextCompression: { threshold, keepRecentCount },
   };
 }
 

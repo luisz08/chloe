@@ -10,6 +10,7 @@ export {
 } from "./config.js";
 export type {
   ChloeConfig,
+  ContextCompressionConfig,
   LoggingConfig,
   ProviderConfig,
   RawFileConfig,
@@ -22,6 +23,7 @@ export type { LogLevel, Logger, LogSink } from "./logger/index.js";
 
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";
+export { getContextLimit } from "./agent/models.js";
 export { resolveModelConfig } from "./agent/router.js";
 export type {
   AgentCallbacks,
