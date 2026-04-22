@@ -54,7 +54,7 @@ specs/014-context-compression/
 packages/core/src/agent/
 ├── compressor.ts         # NEW: token counting, threshold check, summarization
 ├── models.ts             # NEW: MODEL_CONTEXT_LIMITS + getContextLimit() (moved from CLI)
-├── agent.ts              # MODIFIED: inject compression check, fire onContextCompressed
+├── agent.ts              # MODIFIED: inject compression check, fire onContextCompressed, add forceCompress()
 └── types.ts              # MODIFIED: add CompressionInfo, onContextCompressed to AgentCallbacks
 
 packages/core/src/storage/
@@ -68,7 +68,7 @@ packages/core/src/config.ts  # MODIFIED: add ContextCompressionConfig, TOML pars
 
 packages/cli/src/ui/
 ├── types.ts              # MODIFIED: add "system" to MessageRole; getContextLimit from core
-├── App.tsx               # MODIFIED: handle onContextCompressed, push system ChatMessage
+├── App.tsx               # MODIFIED: handle onContextCompressed, push system ChatMessage, handle /compact command
 └── MessageBubble.tsx     # MODIFIED: render "system" role messages
 
 packages/core/src/
@@ -263,7 +263,87 @@ case "system": return "System";  // in roleLabel
 case "system": return "yellow";  // in roleColor (amber for visibility)
 ```
 
-### 6. Config
+### 6. `/compact` slash command
+
+The `/compact` command lets users manually trigger compression at any time. It is handled in `App.tsx` as an internal command branch (same pattern as `reload-skills`), not as a skill file, because it needs direct access to the agent, session ID, and message state.
+
+**`App.tsx` — add a `/compact` branch in `handleSubmit`:**
+
+```typescript
+if (text.trim() === "/compact") {
+  const userMsg: ChatMessage = { id: makeId(), role: "user", content: text, state: "complete" };
+  setMessages((prev) => [...prev, userMsg]);
+
+  if (messages.length === 0) {
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: "assistant",
+      content: "Nothing to compact — this session has no history yet.",
+      state: "complete",
+    }]);
+    return;
+  }
+
+  setStatus("thinking");
+  try {
+    await agent.forceCompress(sessionId, {
+      onContextCompressed: ({ compressedCount, keptCount }) => {
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: "system",
+          content: `⚠️ Context compressed: ${compressedCount} earlier messages were summarized. The most recent ${keptCount} messages are preserved in full.`,
+          state: "complete",
+        }]);
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setMessages((prev) => [...prev, { id: makeId(), role: "assistant", content: `[Error] ${msg}`, state: "complete" }]);
+  } finally {
+    setStatus("idle");
+  }
+  return;
+}
+```
+
+**`Agent.forceCompress(sessionId, callbacks)` (new method in `agent.ts`):**
+
+```typescript
+async forceCompress(sessionId: string, callbacks: Pick<AgentCallbacks, "onContextCompressed"> = {}): Promise<void> {
+  const { storage } = this.config;
+  const history = await storage.getMessages(sessionId);
+  if (history.length === 0) return;
+
+  const existingSummary = await storage.getSessionSummary(sessionId);
+  const messages: MessageParam[] = [];
+  if (existingSummary !== null) {
+    messages.push(
+      { role: "user", content: `<context_summary>${existingSummary}</context_summary>` },
+      { role: "assistant", content: "Understood." },
+    );
+  }
+  messages.push(...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content as MessageParam["content"] })));
+
+  // Force compress: pass threshold=0 to bypass the token check
+  const result = await compressIfNeeded(messages, {
+    client: this.client,
+    model: this.modelConfig.defaultModel,
+    fastModel: this.modelConfig.fastModel,
+    system: this.subagentPromptActive ? SUBAGENT_SYSTEM_PROMPT : undefined,
+    threshold: 0,  // always compress
+    keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+  });
+
+  if (result !== null) {
+    await storage.setSessionSummary(sessionId, extractSummaryText(result.messages));
+    callbacks.onContextCompressed?.({ compressedCount: result.compressedCount, keptCount: result.keptCount });
+  }
+}
+```
+
+The key trick: passing `threshold: 0` to `compressIfNeeded()` ensures the token count always exceeds the threshold, so compression always fires regardless of context length.
+
+**Internal command routing:** Add `/compact` to `INTERNAL_PALETTE` in `App.tsx` so it appears in the slash-command autocomplete palette.
+
+### 7. Config
 
 `config.ts` — add:
 ```typescript

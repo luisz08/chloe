@@ -24,6 +24,9 @@ When a session's conversation history grows to 75% of the model's context window
 | FR-009: Configurable keepRecentCount | T005, T008 | ✅ |
 | FR-010: Configurable threshold | T005, T008 | ✅ |
 | FR-011: Re-trigger with existing summary incorporated | T015, T012 | ✅ |
+| FR-012: `/compact` slash command available | T030, T031, T032 | ✅ |
+| FR-013: `/compact` uses same logic, bypasses threshold | T030 (threshold=0) | ✅ |
+| FR-014: `/compact` on empty session gives friendly message | T029, T031 | ✅ |
 | SC-001: No API failures from context length | US1 path | ✅ |
 | SC-002: 90% coherence on compressed content | Manual test | ✅ (manual) |
 | SC-003: ≤10s compression latency | T008 (fastModel) | ✅ |
@@ -50,6 +53,12 @@ When a session's conversation history grows to 75% of the model's context window
 - Summary load (`getSessionSummary`) happens **before** the token check — this is the mechanism for re-compression to incorporate prior summaries (FR-011)
 - Summary set (`setSessionSummary`) happens **after** successful `compressIfNeeded()` — not before
 - `onContextCompressed` fires **before** `runLoop()`, so the user sees the notification immediately
+
+### `/compact` command (`packages/cli/src/ui/App.tsx` + `agent.ts`)
+- Verify `/compact` is intercepted **before** `routeCommand()` so it doesn't fall through to the agent as a regular message
+- Verify `forceCompress()` uses `threshold: 0` (not the configured threshold) — it must always compress
+- Verify the empty-session guard is in both `forceCompress()` and the App.tsx branch (defense in depth)
+- Verify `/compact` does NOT append a user message to storage (it's a command, not a conversation turn)
 
 ### CLI notification (`packages/cli/src/ui/`)
 - `"system"` role must not be included in messages sent to the Anthropic API (it's UI-only)

@@ -115,6 +115,29 @@
 
 ---
 
+## Phase 5b: User Story 4 - Manual `/compact` Command (Priority: P4)
+
+**Goal**: Users can type `/compact` to proactively compress their session at any time.
+
+**Independent Test**: In any session with messages, type `/compact`. Verify a compression notification appears, the summary is persisted to storage, and subsequent responses reference earlier content correctly. Also verify `/compact` on an empty session gives a friendly message rather than an error.
+
+### Tests for User Story 4
+
+> **Write tests FIRST; ensure they FAIL before implementing T029**
+
+- [ ] T028 [P] [US4] Unit test: `Agent.forceCompress()` with a mocked client calls `compressIfNeeded` with `threshold: 0` and persists the summary — in `packages/core/src/agent/agent.test.ts`
+- [ ] T029 [P] [US4] Unit test: `Agent.forceCompress()` on a session with zero messages returns without error and does not call the API — in `packages/core/src/agent/agent.test.ts`
+
+### Implementation for User Story 4
+
+- [ ] T030 [US4] Add `forceCompress(sessionId, callbacks)` method to `Agent` class in `packages/core/src/agent/agent.ts`; passes `threshold: 0` to `compressIfNeeded()` to bypass token check; loads existing summary and prepends it; calls `storage.setSessionSummary()` and fires `callbacks.onContextCompressed` (depends on T007, T008, Phase 2)
+- [ ] T031 [US4] Handle `/compact` command in `packages/cli/src/ui/App.tsx` `handleSubmit`: detect `text.trim() === "/compact"` before the routing logic; if session has no messages, respond with friendly message; otherwise call `agent.forceCompress()` with `onContextCompressed` callback; set status to `"thinking"` during call (depends on T019, T020, T030)
+- [ ] T032 [US4] Add `/compact` to `INTERNAL_PALETTE` in `packages/cli/src/ui/App.tsx` so it appears in the slash-command autocomplete (depends on T031)
+
+**Checkpoint**: All four user stories complete.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -135,6 +158,10 @@
 - **Phase 5 (US3)**: Depends on Phase 2; T021 depends on T019+T020
   - T017, T018, T019, T020 can run in parallel
   - T021 depends on T019, T020, and Phase 2
+- **Phase 5b (US4)**: Depends on Phase 2 and T008; T028, T029 parallel
+  - T030 depends on T007, T008
+  - T031 depends on T019, T020, T030
+  - T032 depends on T031
 - **Phase 6 (Polish)**: Depends on all story phases complete
 
 ### Parallel Opportunities
