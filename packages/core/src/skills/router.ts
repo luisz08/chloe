@@ -62,6 +62,11 @@ async function buildHelpOutput(opts: RouterOptions): Promise<string> {
     }
   }
 
+  const hasSkills = globalSkills.length > 0 || projectSkills.length > 0 || pluginSkills.length > 0;
+  if (!hasSkills) {
+    sections.push("\nNo skills defined");
+  }
+
   sections.push("\n**Plugin management:**");
   sections.push("- `/plugin list` : List installed plugins");
   sections.push("- `/plugin install <name@marketplace>` : Install a plugin");
