@@ -1,5 +1,6 @@
 import { chatCommand } from "./commands/chat.js";
 import { configCommand } from "./commands/config.js";
+import { pluginCommand } from "./commands/plugin.js";
 import { serveCommand } from "./commands/serve.js";
 import { sessionsCommand } from "./commands/sessions.js";
 
@@ -100,6 +101,14 @@ function parseArgs(): void {
     return;
   }
 
+  if (subcommand === "plugin") {
+    pluginCommand(args.slice(1)).catch((err) => {
+      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    });
+    return;
+  }
+
   if (subcommand === "serve") {
     let port: number | undefined;
     const portIndex = args.indexOf("--port");
@@ -112,7 +121,7 @@ function parseArgs(): void {
   }
 
   if (!subcommand) {
-    console.error("Error: subcommand required (config, chat, sessions, serve)");
+    console.error("Error: subcommand required (config, chat, sessions, serve, plugin)");
     process.exit(1);
   }
 

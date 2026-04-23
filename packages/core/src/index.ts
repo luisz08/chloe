@@ -10,6 +10,7 @@ export {
 } from "./config.js";
 export type {
   ChloeConfig,
+  ContextCompressionConfig,
   LoggingConfig,
   ProviderConfig,
   RawFileConfig,
@@ -22,10 +23,14 @@ export type { LogLevel, Logger, LogSink } from "./logger/index.js";
 
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";
+export { compressIfNeeded, ContextTooLargeError } from "./agent/compressor.js";
+export type { CompressResult, CompressorOptions } from "./agent/compressor.js";
+export { getContextLimit } from "./agent/models.js";
 export { resolveModelConfig } from "./agent/router.js";
 export type {
   AgentCallbacks,
   AgentConfig,
+  CompressionInfo,
   ResolvedModelConfig,
   RunResult,
   TurnUsage,
@@ -67,7 +72,40 @@ export {
   expandArguments,
   loadRecents,
   loadSkills,
+  mergePluginSkills,
   routeCommand,
   saveRecents,
 } from "./skills/index.js";
 export type { CommandResult, RouterOptions, Skill, SkillSource } from "./skills/index.js";
+
+// Plugins
+export type {
+  HookContext,
+  HookEntry,
+  HookEvent,
+  InstalledPluginRecord,
+  LoadedPlugin,
+  MarketplaceManifest,
+  MarketplacePluginEntry,
+  MarketplaceRecord,
+  MarketplaceSource,
+  PluginManifest,
+  PluginSkill,
+  PluginSourceSpec,
+} from "./plugins/index.js";
+export {
+  discoverSkills,
+  HookRegistry,
+  loadHooks,
+  loadInstalledPlugins,
+  loadPlugin,
+  marketplaceCloneDir,
+  pluginCacheDir,
+  readInstalled,
+  readMarketplaceManifest,
+  readMarketplaces,
+  readPluginManifest,
+  validateMarketplaceManifest,
+  writeInstalled,
+  writeMarketplaces,
+} from "./plugins/index.js";

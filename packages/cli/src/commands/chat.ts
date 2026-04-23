@@ -110,11 +110,18 @@ export async function chatCommand({
     ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
     storage,
     modelConfig,
+    contextCompression: cfg.contextCompression,
   });
 
   const agent: AgentHandle = {
     run(sid: string, message: string, callbacks: AgentCallbacks): Promise<void> {
       return coreAgent.run(sid, message, callbacks).then(() => undefined);
+    },
+    forceCompress(
+      sid: string,
+      callbacks: Pick<AgentCallbacks, "onContextCompressed">,
+    ): Promise<void> {
+      return coreAgent.forceCompress(sid, callbacks);
     },
   };
 

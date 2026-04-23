@@ -1,4 +1,5 @@
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
+import type { ContextCompressionConfig } from "../config.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { Tool } from "../tools/types.js";
 
@@ -33,6 +34,13 @@ export interface AgentConfig {
   storage: StorageAdapter;
   /** Optional: full model configuration for multi-model routing */
   modelConfig?: ResolvedModelConfig;
+  /** Optional: context compression configuration */
+  contextCompression?: ContextCompressionConfig;
+}
+
+export interface CompressionInfo {
+  compressedCount: number;
+  keptCount: number;
 }
 
 export interface TurnUsage {
@@ -49,6 +57,7 @@ export interface AgentCallbacks {
   confirmTool?: (name: string, input: unknown) => Promise<boolean>;
   confirmBashCommand?: (binaryName: string) => Promise<boolean>;
   onUsage?: (usage: TurnUsage) => void;
+  onContextCompressed?: (info: CompressionInfo) => void;
 }
 
 export interface RunResult {

@@ -334,3 +334,77 @@ describe("SQLiteStorageAdapter child sessions", () => {
     });
   });
 });
+
+// ─── Session Summary Tests (T013, T014) ──────────────────────────────────────
+
+describe("SQLiteStorageAdapter session summary", () => {
+  function makeAdapter(): SQLiteStorageAdapter {
+    return new SQLiteStorageAdapter(":memory:");
+  }
+
+  test("T013: getSessionSummary returns null for session with no summary", async () => {
+    const adapter = makeAdapter();
+    await adapter.createSession("no-summary", "No Summary");
+
+    const summary = await adapter.getSessionSummary("no-summary");
+    expect(summary).toBeNull();
+  });
+
+  test("T013: getSessionSummary returns null for non-existent session", async () => {
+    const adapter = makeAdapter();
+    const summary = await adapter.getSessionSummary("does-not-exist");
+    expect(summary).toBeNull();
+  });
+
+  test("T014: setSessionSummary persists text and getSessionSummary retrieves it", async () => {
+    const adapter = makeAdapter();
+    await adapter.createSession("with-summary", "With Summary");
+
+    await adapter.setSessionSummary("with-summary", "## Summary\nKey context here.");
+    const retrieved = await adapter.getSessionSummary("with-summary");
+
+    expect(retrieved).toBe("## Summary\nKey context here.");
+  });
+
+  test("T014: summary survives DB close and reopen (file-based persistence)", async () => {
+    const tmpPath = `/tmp/chloe-test-summary-${Date.now()}.db`;
+    try {
+      const adapter1 = new SQLiteStorageAdapter(tmpPath);
+      await adapter1.createSession("persist-test", "Persist Test");
+      await adapter1.setSessionSummary("persist-test", "Persisted summary text");
+
+      // Close by letting it go out of scope, then open fresh
+      const adapter2 = new SQLiteStorageAdapter(tmpPath);
+      const retrieved = await adapter2.getSessionSummary("persist-test");
+      expect(retrieved).toBe("Persisted summary text");
+    } finally {
+      const { unlinkSync } = await import("node:fs");
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
+      try {
+        unlinkSync(`${tmpPath}-wal`);
+      } catch {
+        /* ignore */
+      }
+      try {
+        unlinkSync(`${tmpPath}-shm`);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  test("T014: setSessionSummary can overwrite an existing summary", async () => {
+    const adapter = makeAdapter();
+    await adapter.createSession("overwrite-test", "Overwrite Test");
+
+    await adapter.setSessionSummary("overwrite-test", "First summary");
+    await adapter.setSessionSummary("overwrite-test", "Second summary");
+
+    const retrieved = await adapter.getSessionSummary("overwrite-test");
+    expect(retrieved).toBe("Second summary");
+  });
+});

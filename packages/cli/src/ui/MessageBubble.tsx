@@ -14,6 +14,8 @@ function roleLabel(role: ChatMessage["role"]): string {
       return "Chloe";
     case "tool":
       return "Tool";
+    case "system":
+      return "System";
   }
 }
 
@@ -24,6 +26,8 @@ function roleColor(role: ChatMessage["role"]): string {
     case "assistant":
       return "green";
     case "tool":
+      return "yellow";
+    case "system":
       return "yellow";
   }
 }
