@@ -23,11 +23,14 @@ export type { LogLevel, Logger, LogSink } from "./logger/index.js";
 
 // Agent
 export { Agent, createAgent } from "./agent/agent.js";
+export { compressIfNeeded, ContextTooLargeError } from "./agent/compressor.js";
+export type { CompressResult, CompressorOptions } from "./agent/compressor.js";
 export { getContextLimit } from "./agent/models.js";
 export { resolveModelConfig } from "./agent/router.js";
 export type {
   AgentCallbacks,
   AgentConfig,
+  CompressionInfo,
   ResolvedModelConfig,
   RunResult,
   TurnUsage,

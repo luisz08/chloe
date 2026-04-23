@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   parent_id TEXT DEFAULT NULL,
-  subagent_type TEXT DEFAULT NULL
+  subagent_type TEXT DEFAULT NULL,
+  summary TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -34,6 +35,7 @@ interface SessionRow {
   updated_at: number;
   parent_id: string | null;
   subagent_type: string | null;
+  summary: string | null;
 }
 
 interface SessionSummaryRow extends SessionRow {
@@ -56,6 +58,7 @@ function rowToSession(row: SessionRow): Session {
     updatedAt: row.updated_at,
     parentId: row.parent_id,
     subagentType: row.subagent_type,
+    summary: row.summary,
   };
 }
 
@@ -97,6 +100,11 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     } catch {
       // Index already exists, ignore
     }
+    try {
+      this.db.run("ALTER TABLE sessions ADD COLUMN summary TEXT DEFAULT NULL");
+    } catch {
+      // Column already exists, ignore
+    }
   }
 
   async createSession(id: string, name: string): Promise<Session> {
@@ -107,13 +115,21 @@ export class SQLiteStorageAdapter implements StorageAdapter {
       )
       .run(id, name, now, now);
     getLogger("storage").debug("session created", { session: id });
-    return { id, name, createdAt: now, updatedAt: now, parentId: null, subagentType: null };
+    return {
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      parentId: null,
+      subagentType: null,
+      summary: null,
+    };
   }
 
   async getSession(id: string): Promise<Session | null> {
     const row = this.db
       .prepare<SessionRow, string>(
-        "SELECT id, name, created_at, updated_at, parent_id, subagent_type FROM sessions WHERE id = ?",
+        "SELECT id, name, created_at, updated_at, parent_id, subagent_type, summary FROM sessions WHERE id = ?",
       )
       .get(id);
     return row ? rowToSession(row) : null;
@@ -122,7 +138,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
   async getLastSession(): Promise<Session | null> {
     const row = this.db
       .prepare<SessionRow, []>(
-        "SELECT id, name, created_at, updated_at, parent_id, subagent_type FROM sessions ORDER BY updated_at DESC LIMIT 1",
+        "SELECT id, name, created_at, updated_at, parent_id, subagent_type, summary FROM sessions ORDER BY updated_at DESC LIMIT 1",
       )
       .get();
     return row ? rowToSession(row) : null;
@@ -131,7 +147,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
   async listSessions(): Promise<SessionSummary[]> {
     const rows = this.db
       .prepare<SessionSummaryRow, []>(
-        `SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type,
+        `SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type, s.summary,
           COUNT(m.id) AS message_count
         FROM sessions s
         LEFT JOIN messages m ON m.session_id = s.id
@@ -208,6 +224,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
       updatedAt: now,
       parentId: parentId,
       subagentType: subagentType,
+      summary: null,
     };
   }
 
@@ -231,10 +248,10 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     const treeRows = this.db
       .prepare<SessionRow & { depth: number }, [string, number]>(
         `WITH RECURSIVE session_tree AS (
-          SELECT id, name, created_at, updated_at, parent_id, subagent_type, 0 as depth
+          SELECT id, name, created_at, updated_at, parent_id, subagent_type, summary, 0 as depth
           FROM sessions WHERE id = ?
           UNION ALL
-          SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type, st.depth + 1
+          SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type, s.summary, st.depth + 1
           FROM sessions s
           JOIN session_tree st ON s.parent_id = st.id
           WHERE st.depth < ?
@@ -270,10 +287,21 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     return root;
   }
 
+  async getSessionSummary(id: string): Promise<string | null> {
+    const row = this.db
+      .prepare<{ summary: string | null }, string>("SELECT summary FROM sessions WHERE id = ?")
+      .get(id);
+    return row?.summary ?? null;
+  }
+
+  async setSessionSummary(id: string, summary: string): Promise<void> {
+    this.db.prepare("UPDATE sessions SET summary = ? WHERE id = ?").run(summary, id);
+  }
+
   async listSessionsByType(subagentType: string): Promise<SessionSummary[]> {
     const rows = this.db
       .prepare<SessionSummaryRow, string>(
-        `SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type,
+        `SELECT s.id, s.name, s.created_at, s.updated_at, s.parent_id, s.subagent_type, s.summary,
           COUNT(m.id) AS message_count
         FROM sessions s
         LEFT JOIN messages m ON m.session_id = s.id

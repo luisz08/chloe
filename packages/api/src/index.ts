@@ -48,6 +48,7 @@ const agent = createAgent({
   ...(cfg.provider.baseUrl ? { baseURL: cfg.provider.baseUrl } : {}),
   storage,
   modelConfig,
+  contextCompression: cfg.contextCompression,
 });
 
 const port = resolvePort();

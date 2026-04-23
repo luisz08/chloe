@@ -1,4 +1,4 @@
-export type MessageRole = "user" | "assistant" | "tool";
+export type MessageRole = "user" | "assistant" | "tool" | "system";
 
 export type MessageState =
   | "complete"

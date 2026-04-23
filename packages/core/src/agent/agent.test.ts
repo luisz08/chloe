@@ -40,6 +40,7 @@ function makeMemoryStorage(): StorageAdapter {
         updatedAt: Date.now(),
         parentId: null,
         subagentType: null,
+        summary: null,
       };
       sessions.set(id, s);
       return s;
@@ -85,6 +86,7 @@ function makeMemoryStorage(): StorageAdapter {
         updatedAt: Date.now(),
         parentId,
         subagentType,
+        summary: null,
       };
       sessions.set(id, s);
       return s;
@@ -110,6 +112,12 @@ function makeMemoryStorage(): StorageAdapter {
         .filter((s) => s.subagentType === subagentType)
         .map((s) => ({ ...s, messageCount: msgs.get(s.id)?.length ?? 0 }))
         .sort((a, b) => b.updatedAt - a.updatedAt);
+    },
+    async getSessionSummary(_id: string) {
+      return null;
+    },
+    async setSessionSummary(_id: string, _summary: string) {
+      // no-op in memory mock
     },
   };
 }
@@ -374,5 +382,102 @@ describe("Agent — subagent tool gating", () => {
     expect(toolNames).not.toContain("fast_query");
     expect(toolNames).not.toContain("deep_reasoning");
     expect(streamParams?.system).toBeUndefined();
+  });
+});
+
+// ─── forceCompress Tests (T022, T023) ────────────────────────────────────────
+
+describe("Agent.forceCompress()", () => {
+  it("T023: returns without error and makes no API calls when session has zero messages", async () => {
+    let countTokensCalled = false;
+    let createCalled = false;
+    mock.module("@anthropic-ai/sdk", () => ({
+      default: class MockAnthropic {
+        messages = {
+          stream: () => {
+            throw new Error("should not be called");
+          },
+          countTokens: async () => {
+            countTokensCalled = true;
+            return { input_tokens: 0 };
+          },
+          create: async () => {
+            createCalled = true;
+            return { content: [] };
+          },
+        };
+      },
+    }));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+    const storage = new SQLiteStorageAdapter(":memory:");
+    await storage.createSession("empty-session", "Empty");
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      tools: [],
+      storage,
+    });
+
+    await agent.forceCompress("empty-session", {});
+
+    expect(countTokensCalled).toBe(false);
+    expect(createCalled).toBe(false);
+  });
+
+  it("T022: forceCompress compresses history, persists summary, and fires callback", async () => {
+    const summaryText = "## Key Facts\nImportant context.";
+    mock.module("@anthropic-ai/sdk", () => ({
+      default: class MockAnthropic {
+        messages = {
+          stream: () => {
+            throw new Error("should not be called");
+          },
+          countTokens: async () => ({ input_tokens: 1 }), // threshold=0 bypasses this
+          create: async () => ({
+            content: [{ type: "text", text: summaryText }],
+          }),
+        };
+      },
+    }));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+    const storage = new SQLiteStorageAdapter(":memory:");
+    await storage.createSession("compress-session", "Compress Test");
+
+    // Add enough messages to exceed keepRecentCount
+    for (let i = 0; i < 25; i++) {
+      const role = i % 2 === 0 ? "user" : "assistant";
+      await storage.appendMessage("compress-session", role, `Message ${i}`);
+    }
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      tools: [],
+      storage,
+      contextCompression: { threshold: 0.75, keepRecentCount: 20 },
+    });
+
+    let callbackFired = false;
+    let compressedCount = 0;
+    let keptCount = 0;
+
+    await agent.forceCompress("compress-session", {
+      onContextCompressed: (info) => {
+        callbackFired = true;
+        compressedCount = info.compressedCount;
+        keptCount = info.keptCount;
+      },
+    });
+
+    expect(callbackFired).toBe(true);
+    expect(compressedCount).toBe(5); // 25 - 20
+    expect(keptCount).toBe(20);
+
+    // Summary should be persisted
+    const persisted = await storage.getSessionSummary("compress-session");
+    expect(persisted).toBe(summaryText);
   });
 });

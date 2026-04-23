@@ -1,4 +1,5 @@
 import type { HookRegistry, RouterOptions, TurnUsage } from "@chloe/core";
+import { ContextTooLargeError } from "@chloe/core";
 import {
   addRecent,
   loadInstalledPlugins,
@@ -42,6 +43,7 @@ const BASH_TOOL_NAME = "bash";
 const INTERNAL_PALETTE: PaletteItem[] = [
   { name: "help", description: "Show available commands", isCommand: true },
   { name: "reload-skills", description: "Reload skills from disk", isCommand: true },
+  { name: "compact", description: "Summarize and compress session history", isCommand: true },
 ];
 
 export function App({
@@ -180,6 +182,61 @@ export function App({
         pluginRoot: "",
       });
 
+      // Handle /compact before routeCommand (needs direct agent + session access)
+      if (text.trim() === "/compact") {
+        const userMsg: ChatMessage = {
+          id: makeId(),
+          role: "user",
+          content: text,
+          state: "complete",
+        };
+        setMessages((prev) => [...prev, userMsg]);
+
+        if (messages.length === 0) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: makeId(),
+              role: "assistant",
+              content: "Nothing to compact — this session has no history yet.",
+              state: "complete",
+            },
+          ]);
+          return;
+        }
+
+        setStatus("thinking");
+        try {
+          await agent.forceCompress(sessionId, {
+            onContextCompressed: ({ compressedCount, keptCount }) => {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: makeId(),
+                  role: "system",
+                  content: `⚠️ Context compressed: ${compressedCount} earlier messages were summarized. The most recent ${keptCount} messages are preserved in full.`,
+                  state: "complete",
+                },
+              ]);
+            },
+          });
+        } catch (err) {
+          const msg =
+            err instanceof ContextTooLargeError
+              ? "Session is too large to compress. Even the most recent messages exceed the context limit."
+              : err instanceof Error
+                ? err.message
+                : String(err);
+          setMessages((prev) => [
+            ...prev,
+            { id: makeId(), role: "assistant", content: `[Error] ${msg}`, state: "complete" },
+          ]);
+        } finally {
+          setStatus("idle");
+        }
+        return;
+      }
+
       const routerOpts: RouterOptions = { globalSkillsDir, projectSkillsDir };
       const routeResult = await routeCommand(text, routerOpts);
 
@@ -316,6 +373,17 @@ export function App({
                 confirmBashCommand,
               }),
           onUsage: handleUsage,
+          onContextCompressed: ({ compressedCount, keptCount }) => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: makeId(),
+                role: "system",
+                content: `⚠️ Context compressed: ${compressedCount} earlier messages were summarized to stay within the model's context limit. The most recent ${keptCount} messages are preserved in full.`,
+                state: "complete",
+              },
+            ]);
+          },
         });
 
         // Flush final buffer content
@@ -328,7 +396,12 @@ export function App({
         trackRecent(text);
         bufferRef.current = "";
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg =
+          err instanceof ContextTooLargeError
+            ? "Session is too large to compress. Even the most recent messages exceed the context limit."
+            : err instanceof Error
+              ? err.message
+              : String(err);
         const errId = makeId();
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== assistantId),
@@ -342,6 +415,7 @@ export function App({
     },
     [
       status,
+      messages,
       sessionId,
       agent,
       autoConfirm,

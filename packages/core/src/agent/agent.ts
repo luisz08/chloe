@@ -6,6 +6,7 @@ import { loadInstalledPlugins } from "../plugins/loader.js";
 import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { Tool, ToolContext } from "../tools/types.js";
+import { compressIfNeeded } from "./compressor.js";
 import { detectImages, toContentBlocks } from "./image-input.js";
 import { runLoop } from "./loop.js";
 import { isMultiModel, resolveModelConfig, selectInitialModel } from "./router.js";
@@ -134,6 +135,38 @@ export class Agent {
 
       messages.push({ role: "user", content: userContent });
 
+      // Prepend existing compression summary if present (T015)
+      const existingSummary = await storage.getSessionSummary(sessionId);
+      if (existingSummary !== null) {
+        messages.unshift(
+          { role: "user", content: `<context_summary>${existingSummary}</context_summary>` },
+          {
+            role: "assistant",
+            content: "Understood. I have the context from earlier in this session.",
+          },
+        );
+      }
+
+      // Compress if token count exceeds threshold (T012)
+      const compressResult = await compressIfNeeded(messages, {
+        client: this.client,
+        model: initialModel,
+        fastModel: this.modelConfig.fastModel,
+        ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
+        threshold: this.config.contextCompression?.threshold ?? 0.75,
+        keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+      });
+
+      if (compressResult !== null) {
+        await storage.setSessionSummary(sessionId, compressResult.summaryText);
+        messages.length = 0;
+        messages.push(...compressResult.messages);
+        callbacks.onContextCompressed?.({
+          compressedCount: compressResult.compressedCount,
+          keptCount: compressResult.keptCount,
+        });
+      }
+
       // Run the ReAct loop with optional system prompt for subagent tools
       const toolContext: ToolContext = {
         sessionId,
@@ -175,6 +208,47 @@ export class Agent {
         pluginRoot: "",
       });
       this.bashPermissionRef.current = null;
+    }
+  }
+
+  async forceCompress(
+    sessionId: string,
+    callbacks: Pick<AgentCallbacks, "onContextCompressed"> = {},
+  ): Promise<void> {
+    const { storage } = this.config;
+    const history = await storage.getMessages(sessionId);
+    if (history.length === 0) return;
+
+    const existingSummary = await storage.getSessionSummary(sessionId);
+    const messages: MessageParam[] = [];
+    if (existingSummary !== null) {
+      messages.push(
+        { role: "user", content: `<context_summary>${existingSummary}</context_summary>` },
+        { role: "assistant", content: "Understood." },
+      );
+    }
+    messages.push(
+      ...history.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content as MessageParam["content"],
+      })),
+    );
+
+    const result = await compressIfNeeded(messages, {
+      client: this.client,
+      model: this.modelConfig.defaultModel,
+      fastModel: this.modelConfig.fastModel,
+      ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
+      threshold: 0,
+      keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+    });
+
+    if (result !== null) {
+      await storage.setSessionSummary(sessionId, result.summaryText);
+      callbacks.onContextCompressed?.({
+        compressedCount: result.compressedCount,
+        keptCount: result.keptCount,
+      });
     }
   }
 }
