@@ -231,7 +231,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
   async getChildSessions(parentId: string): Promise<Session[]> {
     const rows = this.db
       .prepare<SessionRow, string>(
-        "SELECT id, name, created_at, updated_at, parent_id, subagent_type FROM sessions WHERE parent_id = ? ORDER BY created_at ASC",
+        "SELECT id, name, created_at, updated_at, parent_id, subagent_type, summary FROM sessions WHERE parent_id = ? ORDER BY created_at ASC",
       )
       .all(parentId);
     getLogger("storage").debug("child sessions loaded", { parent: parentId, count: rows.length });
