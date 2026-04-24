@@ -10,17 +10,20 @@ import {
   saveRecents,
 } from "@chloe/core";
 import type { Skill } from "@chloe/core";
-import { Box, Text, useApp, useInput, useStdout } from "ink";
+import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentHandle } from "../agent-handle.js";
 import { BashPermissionBlock } from "./BashPermissionBlock.js";
 import { ChatView } from "./ChatView.js";
+import { ChloeHeader } from "./ChloeHeader.js";
 import { CommandPalette } from "./CommandPalette.js";
 import type { PaletteItem } from "./CommandPalette.js";
 import { InputArea } from "./InputArea.js";
 import { StatusBar } from "./StatusBar.js";
 import type { ChatMessage, ConfirmResult, TokenUsage, UIStatus } from "./types.js";
 import { getContextLimit } from "./types.js";
+
+const HEADER_ITEMS = [{}];
 
 interface AppProps {
   sessionId: string;
@@ -540,6 +543,9 @@ export function App({
 
   return (
     <>
+      <Static items={HEADER_ITEMS}>
+        {() => <ChloeHeader key="chloe-header" modelName={modelName} />}
+      </Static>
       <ChatView
         messages={messages}
         streamingId={streamingIdRef.current}
