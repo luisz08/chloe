@@ -3,8 +3,12 @@ import { basename, join } from "node:path";
 import type { MarketplaceManifest, PluginManifest } from "./types.js";
 
 export function readPluginManifest(pluginDir: string): PluginManifest {
-  const manifestPath = join(pluginDir, ".chloe-plugin", "plugin.json");
-  if (!existsSync(manifestPath)) {
+  const candidates = [
+    join(pluginDir, ".chloe-plugin", "plugin.json"),
+    join(pluginDir, ".claude-plugin", "plugin.json"),
+  ];
+  const manifestPath = candidates.find(existsSync);
+  if (!manifestPath) {
     return { name: basename(pluginDir) };
   }
   try {
@@ -16,9 +20,13 @@ export function readPluginManifest(pluginDir: string): PluginManifest {
 }
 
 export function readMarketplaceManifest(marketplaceDir: string): MarketplaceManifest {
-  const manifestPath = join(marketplaceDir, ".chloe-plugin", "marketplace.json");
-  if (!existsSync(manifestPath)) {
-    throw new Error(`Marketplace manifest not found: ${manifestPath}`);
+  const candidates = [
+    join(marketplaceDir, ".chloe-plugin", "marketplace.json"),
+    join(marketplaceDir, ".claude-plugin", "marketplace.json"),
+  ];
+  const manifestPath = candidates.find(existsSync);
+  if (!manifestPath) {
+    throw new Error(`Marketplace manifest not found: tried ${candidates.join(", ")}`);
   }
   let parsed: unknown;
   try {

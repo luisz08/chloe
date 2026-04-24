@@ -247,5 +247,5 @@ export async function routeCommand(input: string, opts: RouterOptions): Promise<
     return { kind: "error", message: `Skill '${name}' is empty` };
   }
 
-  return { kind: "skill", expandedContent: expandArguments(skill.content, args) };
+  return { kind: "skill", expandedContent: expandArguments(skill.content, args), args };
 }

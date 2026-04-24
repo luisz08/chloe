@@ -71,8 +71,8 @@ export async function resolvePluginSource(
 
   if (typeof source === "string") {
     const srcPath = resolve(mktDir, source);
-    const containmentRoot = resolve(mktDir) + sep;
-    if (!srcPath.startsWith(containmentRoot)) {
+    const resolvedMktDir = resolve(mktDir);
+    if (srcPath !== resolvedMktDir && !srcPath.startsWith(resolvedMktDir + sep)) {
       throw new Error(`Plugin source escapes marketplace directory: ${source}`);
     }
     cpSync(srcPath, cacheDir, { recursive: true });

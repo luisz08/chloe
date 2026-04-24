@@ -13,7 +13,7 @@ export interface Skill {
 }
 
 export type CommandResult =
-  | { kind: "skill"; expandedContent: string }
+  | { kind: "skill"; expandedContent: string; args: string }
   | { kind: "internal"; output: string }
   | { kind: "reload-skills" }
   | { kind: "error"; message: string }

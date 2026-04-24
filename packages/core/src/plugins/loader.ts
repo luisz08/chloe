@@ -4,6 +4,7 @@ import { getLogger } from "../logger/index.js";
 import { extractDescription } from "../skills/loader.js";
 import { readPluginManifest } from "./manifest.js";
 import { readInstalled } from "./storage.js";
+import type { PluginManifest } from "./types.js";
 import {
   type HookEntry,
   HookEntryType,
@@ -37,13 +38,17 @@ export async function loadPlugin(record: InstalledPluginRecord): Promise<LoadedP
     log.debug("not yet supported", { pluginId: record.id });
   }
 
-  const skills = discoverSkills(record.cacheDir, record.id);
+  const skills = discoverSkills(record.cacheDir, record.id, manifest);
   const hooks = loadHooks(record.cacheDir, record.id);
 
   return { id: record.id, manifest, cacheDir: record.cacheDir, skills, hooks };
 }
 
-export function discoverSkills(cacheDir: string, pluginId: string): PluginSkill[] {
+export function discoverSkills(
+  cacheDir: string,
+  pluginId: string,
+  manifest?: PluginManifest,
+): PluginSkill[] {
   const log = getLogger("plugins");
   const skills: PluginSkill[] = [];
 
@@ -93,6 +98,36 @@ export function discoverSkills(cacheDir: string, pluginId: string): PluginSkill[
         log.warn("failed to load command skill", {
           pluginId,
           file,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  // Manifest-declared skills: "skills": "./" or ["path1", "path2"]
+  if (manifest?.skills) {
+    const declaredPaths = [manifest.skills].flat();
+    const discoveredNames = new Set(skills.map((s) => s.name));
+    for (const relPath of declaredPaths) {
+      const skillDir = join(cacheDir, relPath);
+      const skillFile = join(skillDir, "SKILL.md");
+      if (!existsSync(skillFile)) continue;
+      const name = manifest.name;
+      if (discoveredNames.has(name)) continue;
+      try {
+        const content = readFileSync(skillFile, "utf8");
+        skills.push({
+          name,
+          content,
+          source: SkillSource.Plugin,
+          description: extractDescription(content),
+          pluginId,
+        });
+        discoveredNames.add(name);
+      } catch (err) {
+        log.warn("failed to load manifest-declared skill", {
+          pluginId,
+          path: skillFile,
           error: err instanceof Error ? err.message : String(err),
         });
       }

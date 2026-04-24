@@ -1,5 +1,16 @@
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+export function normalizeGitHubRepo(input: string): string {
+  let s = input.trim();
+  // Strip protocol
+  s = s.replace(/^https?:\/\//, "");
+  // Strip leading github.com/
+  s = s.replace(/^github\.com\//, "");
+  // Strip trailing .git
+  s = s.replace(/\.git$/, "");
+  return s;
+}
+
 export function buildGitHubUrl(repo: string): string {
   return `https://github.com/${repo}.git`;
 }

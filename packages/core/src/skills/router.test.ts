@@ -36,7 +36,7 @@ describe("routeCommand — internal commands", () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it("handles /help with no skills defined", async () => {
+  it("handles /help with no global or project skills", async () => {
     const result = await routeCommand("/help", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -44,7 +44,9 @@ describe("routeCommand — internal commands", () => {
     expect(result.kind).toBe("internal");
     if (result.kind === "internal") {
       expect(result.output).toContain("/help");
-      expect(result.output).toContain("No skills defined");
+      // No global or project skill sections should appear
+      expect(result.output).not.toContain("Skills (global)");
+      expect(result.output).not.toContain("Skills (project)");
     }
   });
 

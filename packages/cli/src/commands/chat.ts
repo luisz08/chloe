@@ -114,8 +114,13 @@ export async function chatCommand({
   });
 
   const agent: AgentHandle = {
-    run(sid: string, message: string, callbacks: AgentCallbacks): Promise<void> {
-      return coreAgent.run(sid, message, callbacks).then(() => undefined);
+    run(
+      sid: string,
+      message: string,
+      callbacks: AgentCallbacks,
+      skillSystem?: string,
+    ): Promise<void> {
+      return coreAgent.run(sid, message, callbacks, skillSystem).then(() => undefined);
     },
     forceCompress(
       sid: string,

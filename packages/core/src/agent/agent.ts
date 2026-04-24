@@ -89,6 +89,7 @@ export class Agent {
     sessionId: string,
     userMessage: string,
     callbacks: AgentCallbacks = {},
+    skillSystem?: string,
   ): Promise<RunResult> {
     const { storage } = this.config;
     const log = getLogger("agent");
@@ -150,12 +151,18 @@ export class Agent {
         );
       }
 
+      const systemParts = [
+        this.subagentPromptActive ? SUBAGENT_SYSTEM_PROMPT : null,
+        skillSystem ?? null,
+      ].filter(Boolean);
+      const system = systemParts.length > 0 ? systemParts.join("\n\n") : undefined;
+
       // Compress if token count exceeds threshold (T012)
       const compressResult = await compressIfNeeded(messages, {
         client: this.client,
         model: initialModel,
         fastModel: this.modelConfig.fastModel,
-        ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
+        ...(system !== undefined ? { system } : {}),
         threshold: this.config.contextCompression?.threshold ?? 0.75,
         keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
       });
@@ -195,7 +202,7 @@ export class Agent {
         callbacks,
         toolContext,
         hookRegistry: this.hookRegistry,
-        ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
+        ...(system !== undefined ? { system } : {}),
       });
 
       // Persist the new messages (user + assistant turns added by the loop)

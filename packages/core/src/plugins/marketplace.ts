@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildGitHubUrl, gitClone, gitPull } from "./git.js";
+import { buildGitHubUrl, gitClone, gitPull, normalizeGitHubRepo } from "./git.js";
 import { readMarketplaceManifest } from "./manifest.js";
 import {
   marketplaceCloneDir,
@@ -51,14 +51,15 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
     return name;
   }
 
+  const repo = normalizeGitHubRepo(source);
   const existing = Object.values(marketplaces).find(
-    (m) => m.source.type === MarketplaceSourceType.Github && m.source.repo === source,
+    (m) => m.source.type === MarketplaceSourceType.Github && m.source.repo === repo,
   );
   if (existing) {
     throw new Error(`Marketplace already registered: ${existing.name}`);
   }
 
-  const url = buildGitHubUrl(source);
+  const url = buildGitHubUrl(repo);
   const tmp = tempDir();
   try {
     await gitClone(url, tmp);
@@ -71,7 +72,7 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
     const record: MarketplaceRecord = {
       name,
       addedAt: new Date().toISOString(),
-      source: { type: MarketplaceSourceType.Github, repo: source },
+      source: { type: MarketplaceSourceType.Github, repo: repo },
       cloneDir: finalDir,
     };
     marketplaces[name] = record;

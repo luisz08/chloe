@@ -302,7 +302,11 @@ export function App({
         return;
       }
 
-      const messageToSend = routeResult.kind === "skill" ? routeResult.expandedContent : text;
+      const skillSystem = routeResult.kind === "skill" ? routeResult.expandedContent : undefined;
+      const messageToSend =
+        routeResult.kind === "skill"
+          ? routeResult.args || "(skill invoked with no arguments)"
+          : text;
 
       const userMsg: ChatMessage = {
         id: makeId(),
@@ -326,68 +330,73 @@ export function App({
       setStatus("thinking");
 
       try {
-        await agent.run(sessionId, messageToSend, {
-          onToken: (tok: string) => {
-            setStatus("streaming");
-            bufferRef.current += tok;
-          },
-          onToolCall: (name: string, input: unknown) => {
-            const toolId = makeId();
-            const toolMsg: ChatMessage = {
-              id: toolId,
-              role: "tool",
-              toolName: name,
-              toolInput: input,
-              content: "",
-              state: autoConfirm || name === BASH_TOOL_NAME ? "confirmed" : "pending",
-            };
-            setMessages((prev) => [...prev, toolMsg]);
-          },
-          onToolResult: (name: string, output: string) => {
-            setMessages((prev) => {
-              const idx = [...prev]
-                .reverse()
-                .findIndex(
-                  (m) =>
-                    m.role === "tool" &&
-                    m.toolName === name &&
-                    (m.state === "confirmed" ||
-                      m.state === "pending" ||
-                      m.state === "session-allowed"),
+        await agent.run(
+          sessionId,
+          messageToSend,
+          {
+            onToken: (tok: string) => {
+              setStatus("streaming");
+              bufferRef.current += tok;
+            },
+            onToolCall: (name: string, input: unknown) => {
+              const toolId = makeId();
+              const toolMsg: ChatMessage = {
+                id: toolId,
+                role: "tool",
+                toolName: name,
+                toolInput: input,
+                content: "",
+                state: autoConfirm || name === BASH_TOOL_NAME ? "confirmed" : "pending",
+              };
+              setMessages((prev) => [...prev, toolMsg]);
+            },
+            onToolResult: (name: string, output: string) => {
+              setMessages((prev) => {
+                const idx = [...prev]
+                  .reverse()
+                  .findIndex(
+                    (m) =>
+                      m.role === "tool" &&
+                      m.toolName === name &&
+                      (m.state === "confirmed" ||
+                        m.state === "pending" ||
+                        m.state === "session-allowed"),
+                  );
+                if (idx === -1) return prev;
+                const realIdx = prev.length - 1 - idx;
+                return prev.map((m, i) =>
+                  i === realIdx ? { ...m, toolOutput: output, state: "done" } : m,
                 );
-              if (idx === -1) return prev;
-              const realIdx = prev.length - 1 - idx;
-              return prev.map((m, i) =>
-                i === realIdx ? { ...m, toolOutput: output, state: "done" } : m,
-              );
-            });
-          },
-          ...(autoConfirm
-            ? {}
-            : {
-                confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
-                  if (name === BASH_TOOL_NAME) return true;
-                  if (sessionAllowedTools.has(name)) return true;
-                  const result = await new Promise<ConfirmResult>((resolve) => {
-                    confirmResolveRef.current = resolve;
-                  });
-                  return result !== "deny";
+              });
+            },
+            ...(autoConfirm
+              ? {}
+              : {
+                  confirmTool: async (name: string, _input: unknown): Promise<boolean> => {
+                    if (name === BASH_TOOL_NAME) return true;
+                    if (sessionAllowedTools.has(name)) return true;
+                    const result = await new Promise<ConfirmResult>((resolve) => {
+                      confirmResolveRef.current = resolve;
+                    });
+                    return result !== "deny";
+                  },
+                  confirmBashCommand,
+                }),
+            onUsage: handleUsage,
+            onContextCompressed: ({ compressedCount, keptCount }) => {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: makeId(),
+                  role: "system",
+                  content: `⚠️ Context compressed: ${compressedCount} earlier messages were summarized to stay within the model's context limit. The most recent ${keptCount} messages are preserved in full.`,
+                  state: "complete",
                 },
-                confirmBashCommand,
-              }),
-          onUsage: handleUsage,
-          onContextCompressed: ({ compressedCount, keptCount }) => {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: makeId(),
-                role: "system",
-                content: `⚠️ Context compressed: ${compressedCount} earlier messages were summarized to stay within the model's context limit. The most recent ${keptCount} messages are preserved in full.`,
-                state: "complete",
-              },
-            ]);
+              ]);
+            },
           },
-        });
+          skillSystem,
+        );
 
         // Flush final buffer content
         const finalContent = bufferRef.current;
