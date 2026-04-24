@@ -129,6 +129,29 @@ export function InputArea({
         return;
       }
 
+      if (key.upArrow) {
+        // Move cursor to same column on the previous line
+        const lineStart = value.lastIndexOf("\n", cursor - 1);
+        if (lineStart === -1) return; // already on first line
+        const col = cursor - (lineStart + 1);
+        const prevLineEnd = lineStart;
+        const prevLineStart = value.lastIndexOf("\n", prevLineEnd - 1) + 1;
+        setCursor(prevLineStart + Math.min(col, prevLineEnd - prevLineStart));
+        return;
+      }
+
+      if (key.downArrow) {
+        // Move cursor to same column on the next line
+        const lineStart = value.lastIndexOf("\n", cursor - 1) + 1;
+        const col = cursor - lineStart;
+        const nextLineStart = value.indexOf("\n", cursor);
+        if (nextLineStart === -1) return; // already on last line
+        const nextLineEnd = value.indexOf("\n", nextLineStart + 1);
+        const nextLineLen = (nextLineEnd === -1 ? value.length : nextLineEnd) - (nextLineStart + 1);
+        setCursor(nextLineStart + 1 + Math.min(col, nextLineLen));
+        return;
+      }
+
       if (key.tab) {
         if (autocompleteActive) {
           onTabComplete();
@@ -187,6 +210,13 @@ export function InputArea({
           </Box>
         )}
       </Box>
+      {!disabled && (
+        <Box paddingX={1} justifyContent="flex-end">
+          <Text color="gray" dimColor>
+            Shift+Enter for newline
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
