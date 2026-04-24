@@ -545,7 +545,6 @@ export function App({
         streamingId={streamingIdRef.current}
         onToolConfirm={handleToolConfirm}
         pendingToolId={pendingToolMessage?.id ?? null}
-        scrollDisabled={paletteItems.length > 0}
       />
       {pendingBashBinary !== null && (
         <BashPermissionBlock binaryName={pendingBashBinary} onResult={handleBashPermission} />

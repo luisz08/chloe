@@ -1,60 +1,37 @@
-import { Box, Text, useInput, useStdout } from "ink";
-import { useEffect, useRef, useState } from "react";
+import { Box, Static, Text } from "ink";
+import { useRef } from "react";
 import { MessageBubble } from "./MessageBubble.js";
 import { ToolBlock } from "./ToolBlock.js";
-import type { ChatMessage, ConfirmResult } from "./types.js";
+import type { ChatMessage, ConfirmResult, MessageState } from "./types.js";
 
 interface ChatViewProps {
   messages: ChatMessage[];
   streamingId: string | null;
   onToolConfirm: (result: ConfirmResult) => void;
   pendingToolId: string | null;
-  scrollDisabled: boolean;
 }
 
-export function ChatView({
-  messages,
-  streamingId,
-  onToolConfirm,
-  pendingToolId,
-  scrollDisabled,
-}: ChatViewProps) {
-  const { stdout } = useStdout();
-  const rows = stdout?.rows ?? 24;
-  // Reserve rows for input area (~4) and status bar (~1)
-  const viewHeight = Math.max(5, rows - 6);
+const STATIC_STATES = new Set<MessageState>(["complete", "done", "denied"]);
 
-  const [scrollOffset, setScrollOffset] = useState(0);
-  const [manualScroll, setManualScroll] = useState(false);
-  const prevLenRef = useRef(messages.length);
+export function ChatView({ messages, streamingId, onToolConfirm, pendingToolId }: ChatViewProps) {
+  // Accumulate static messages in the order they complete — never reorder.
+  // Static renders by position (index); inserting in the middle silently drops items.
+  const staticRef = useRef<ChatMessage[]>([]);
+  const staticIds = useRef<Set<string>>(new Set());
 
-  // Auto-scroll to bottom on new messages unless user manually scrolled
-  useEffect(() => {
-    if (!manualScroll && messages.length !== prevLenRef.current) {
-      setScrollOffset(0);
-    }
-    prevLenRef.current = messages.length;
-  }, [messages.length, manualScroll]);
-
-  useInput(
-    (_, key) => {
-      if (key.upArrow) {
-        setManualScroll(true);
-        setScrollOffset((o) => Math.min(o + 1, Math.max(0, messages.length - 1)));
-      } else if (key.downArrow) {
-        setScrollOffset((o) => {
-          const next = Math.max(0, o - 1);
-          if (next === 0) setManualScroll(false);
-          return next;
-        });
-      }
-    },
-    { isActive: pendingToolId === null && !scrollDisabled },
+  const newStatic = messages.filter(
+    (m) => STATIC_STATES.has(m.state) && !staticIds.current.has(m.id),
   );
+  if (newStatic.length > 0) {
+    for (const msg of newStatic) staticIds.current.add(msg.id);
+    staticRef.current = [...staticRef.current, ...newStatic];
+  }
+  const staticMessages = staticRef.current;
+  const activeMessages = messages.filter((m) => !STATIC_STATES.has(m.state));
 
   if (messages.length === 0) {
     return (
-      <Box height={viewHeight} flexDirection="column" justifyContent="center" alignItems="center">
+      <Box flexDirection="column" justifyContent="center" alignItems="center">
         <Text color="gray">Start a conversation. Type a message and press Enter.</Text>
         <Text color="gray" dimColor>
           (Ctrl+J or Shift+Enter for newline)
@@ -63,40 +40,33 @@ export function ChatView({
     );
   }
 
-  // Scroll: show last viewHeight-ish messages, offset upward by scrollOffset
-  const visibleMessages = messages.slice(
-    Math.max(0, messages.length - viewHeight - scrollOffset),
-    Math.max(0, messages.length - scrollOffset),
-  );
-
-  const hasMore = messages.length - scrollOffset > viewHeight;
-  const hiddenAbove = messages.length - visibleMessages.length - scrollOffset;
-
   return (
-    <Box flexDirection="column" height={viewHeight} overflow="hidden">
-      {hiddenAbove > 0 && (
-        <Text color="gray" dimColor>
-          ↑ {hiddenAbove} more message{hiddenAbove > 1 ? "s" : ""} above
-        </Text>
-      )}
-      {visibleMessages.map((msg) => {
-        if (msg.role === "tool") {
-          return (
-            <ToolBlock
-              key={msg.id}
-              message={msg}
-              isPending={msg.id === pendingToolId}
-              onConfirm={onToolConfirm}
-            />
-          );
-        }
-        return <MessageBubble key={msg.id} message={msg} isStreaming={msg.id === streamingId} />;
-      })}
-      {hasMore && scrollOffset === 0 && (
-        <Text color="gray" dimColor>
-          ↑ scroll up to see more
-        </Text>
-      )}
-    </Box>
+    <>
+      <Static items={staticMessages}>
+        {(msg) => {
+          if (msg.role === "tool") {
+            return (
+              <ToolBlock key={msg.id} message={msg} isPending={false} onConfirm={onToolConfirm} />
+            );
+          }
+          return <MessageBubble key={msg.id} message={msg} isStreaming={false} />;
+        }}
+      </Static>
+      <Box flexDirection="column">
+        {activeMessages.map((msg) => {
+          if (msg.role === "tool") {
+            return (
+              <ToolBlock
+                key={msg.id}
+                message={msg}
+                isPending={msg.id === pendingToolId}
+                onConfirm={onToolConfirm}
+              />
+            );
+          }
+          return <MessageBubble key={msg.id} message={msg} isStreaming={msg.id === streamingId} />;
+        })}
+      </Box>
+    </>
   );
 }

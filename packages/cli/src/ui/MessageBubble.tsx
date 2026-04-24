@@ -1,6 +1,8 @@
 import { Box, Text } from "ink";
 import type { ChatMessage } from "./types.js";
 
+const CONTENT_PADDING_LEFT = 2;
+
 interface MessageBubbleProps {
   message: ChatMessage;
   isStreaming: boolean;
@@ -63,7 +65,7 @@ function renderContent(message: ChatMessage, isStreaming: boolean): string {
         ).markdown;
         return md.ansi(content, {
           colors: true,
-          columns: process.stdout.columns ?? 80,
+          columns: (process.stdout.columns ?? 80) - CONTENT_PADDING_LEFT,
         });
       } catch {
         // fall through to plain text
@@ -83,7 +85,7 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
       <Text color={roleColor(message.role)} bold>
         {roleLabel(message.role)}
       </Text>
-      <Box paddingLeft={2}>
+      <Box paddingLeft={CONTENT_PADDING_LEFT}>
         <Text>
           {content}
           {cursor}

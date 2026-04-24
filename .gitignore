@@ -40,3 +40,5 @@ coverage/
 
 # Plugin system test fixture
 specs/013-plugin-system/test-marketplace/
+
+temp/
