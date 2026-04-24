@@ -35,6 +35,8 @@ function clearEnv(): void {
     "CHLOE_DB_PATH",
     "CHLOE_LOG_DIR",
     "CHLOE_LOG_LEVEL",
+    "CHLOE_SEARCH_PROVIDER",
+    "CHLOE_BRAVE_API_KEY",
   ]) {
     delete process.env[key];
   }
@@ -297,5 +299,39 @@ describe("loadConfig — logging defaults", () => {
     const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.logging.logDir).not.toContain("~");
     expect(cfg.logging.logDir).toContain(".chloe/logs");
+  });
+});
+
+describe("search config", () => {
+  beforeEach(() => {
+    setupTempDir();
+    clearEnv();
+  });
+  afterEach(cleanupTempDir);
+
+  it("defaults to duckduckgo when [search] section is absent", () => {
+    writeToml(`[provider]\napi_key = "key"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.search.provider).toBe("duckduckgo");
+    expect(cfg.search.braveApiKey).toBeUndefined();
+  });
+
+  it("reads provider from [search] section", () => {
+    writeToml(`[provider]\napi_key = "key"\n[search]\nprovider = "brave"\nbrave_api_key = "bk-123"\n`);
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.search.provider).toBe("brave");
+    expect(cfg.search.braveApiKey).toBe("bk-123");
+  });
+
+  it("CHLOE_SEARCH_PROVIDER env var overrides file value", () => {
+    writeToml(`[provider]\napi_key = "key"\n[search]\nprovider = "brave"\n`);
+    process.env.CHLOE_SEARCH_PROVIDER = "duckduckgo";
+    const cfg = loadConfigFrom(CONFIG_PATH);
+    expect(cfg.search.provider).toBe("duckduckgo");
+  });
+
+  it("defaults to duckduckgo when config file is missing", () => {
+    const cfg = loadConfigFrom("/nonexistent/path/config.toml");
+    expect(cfg.search.provider).toBe("duckduckgo");
   });
 });
