@@ -2,6 +2,8 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import type { HookRegistry } from "../plugins/hooks.js";
+import { HookEvent } from "../plugins/types.js";
+import { ContentBlockType, StopReason, StreamEventType } from "../providers/anthropic.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { ToolContext } from "../tools/types.js";
 import type { AgentCallbacks, RunResult } from "./types.js";
@@ -40,7 +42,10 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 
     let currentText = "";
     for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      if (
+        event.type === StreamEventType.ContentBlockDelta &&
+        event.delta.type === StreamEventType.TextDelta
+      ) {
         currentText += event.delta.text;
         callbacks.onToken?.(event.delta.text);
       }
@@ -58,7 +63,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
     // Build the assistant message from the final message content
     const assistantContent: Array<TextBlock | ToolUseBlock> = [];
     for (const block of finalMessage.content) {
-      if (block.type === "text" || block.type === "tool_use") {
+      if (block.type === ContentBlockType.Text || block.type === ContentBlockType.ToolUse) {
         assistantContent.push(block);
       }
     }
@@ -73,23 +78,23 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
 
     log.debug("stop reason", { reason: finalMessage.stop_reason });
 
-    if (finalMessage.stop_reason === "end_turn") {
+    if (finalMessage.stop_reason === StopReason.EndTurn) {
       break;
     }
 
-    if (finalMessage.stop_reason !== "tool_use") {
+    if (finalMessage.stop_reason !== StopReason.ToolUse) {
       break;
     }
 
     // Handle tool use blocks
     const toolResults: Array<{
-      type: "tool_result";
+      type: typeof ContentBlockType.ToolResult;
       tool_use_id: string;
       content: string;
     }> = [];
 
     for (const block of finalMessage.content) {
-      if (block.type !== "tool_use") {
+      if (block.type !== ContentBlockType.ToolUse) {
         continue;
       }
 
@@ -106,7 +111,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
         if (!confirmed) {
           log.debug("tool denied", { tool: toolName });
           toolResults.push({
-            type: "tool_result",
+            type: ContentBlockType.ToolResult,
             tool_use_id: block.id,
             content: "Tool execution was denied by the user.",
           });
@@ -126,15 +131,15 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
       }
 
       try {
-        void hookRegistry?.fire("PreToolUse", {
-          event: "PreToolUse",
+        void hookRegistry?.fire(HookEvent.PreToolUse, {
+          event: HookEvent.PreToolUse,
           toolName,
           sessionId: toolContext?.sessionId ?? "",
           pluginRoot: "",
         });
         const output = await tool.execute(toolInput, toolContext);
-        void hookRegistry?.fire("PostToolUse", {
-          event: "PostToolUse",
+        void hookRegistry?.fire(HookEvent.PostToolUse, {
+          event: HookEvent.PostToolUse,
           toolName,
           sessionId: toolContext?.sessionId ?? "",
           pluginRoot: "",

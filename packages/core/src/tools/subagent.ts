@@ -18,13 +18,25 @@ import type {
   ImageBlockParam,
   MessageParam,
 } from "@anthropic-ai/sdk/resources/messages";
-import type { ResolvedModelConfig } from "../agent/types.js";
+import { ImageInputType, type ResolvedModelConfig } from "../agent/types.js";
 import { getLogger } from "../logger/index.js";
-import type { SubagentRequestContent, SubagentResponseContent } from "../session/types.js";
+import { ContentBlockType } from "../providers/anthropic.js";
+import {
+  SubagentContentType,
+  type SubagentRequestContent,
+  type SubagentResponseContent,
+} from "../session/types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { Tool, ToolContext } from "./types.js";
 
 const log = getLogger("subagent");
+
+export const SubagentToolName = {
+  VisionAnalyze: "vision_analyze",
+  FastQuery: "fast_query",
+  DeepReasoning: "deep_reasoning",
+} as const;
+export type SubagentToolName = (typeof SubagentToolName)[keyof typeof SubagentToolName];
 
 // ─── Media Type Mapping ────────────────────────────────────────────────────────
 
@@ -45,10 +57,12 @@ function getMediaType(path: string): SupportedMediaType {
 }
 
 function buildImageBlock(
-  source: { type: "path"; value: string } | { type: "url"; value: string },
+  source:
+    | { type: typeof ImageInputType.Path; value: string }
+    | { type: typeof ImageInputType.Url; value: string },
 ): ImageBlockParam | null {
   try {
-    if (source.type === "path") {
+    if (source.type === ImageInputType.Path) {
       if (!existsSync(source.value)) {
         log.warn("image path does not exist", { path: source.value });
         return null;
@@ -76,7 +90,7 @@ function buildImageBlock(
 
 async function persistSubagentCall(
   context: ToolContext,
-  subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+  subagentType: SubagentToolName,
   requestContent: SubagentRequestContent,
   responseText: string,
   response: Anthropic.Messages.Message,
@@ -96,7 +110,7 @@ async function persistSubagentCall(
 
   // Build response content with metadata
   const responseContent: SubagentResponseContent = {
-    type: "subagent_response",
+    type: SubagentContentType.Response,
     text: responseText,
     metadata: {
       api_message_id: response.id,
@@ -120,7 +134,7 @@ async function persistSubagentCall(
 
 async function persistSubagentError(
   context: ToolContext,
-  subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+  subagentType: SubagentToolName,
   requestContent: SubagentRequestContent,
   errorMessage: string,
 ): Promise<void> {
@@ -133,7 +147,7 @@ async function persistSubagentError(
   await storage.appendMessage(childSession.id, "user", requestContent);
 
   const responseContent: SubagentResponseContent = {
-    type: "subagent_response",
+    type: SubagentContentType.Response,
     text: "",
     metadata: {
       api_message_id: "",
@@ -164,7 +178,7 @@ export function createVisionAnalyzeTool(
   registry: ToolRegistry,
 ): Tool {
   return {
-    name: "vision_analyze",
+    name: SubagentToolName.VisionAnalyze,
     description:
       "Analyze image content using a vision-capable model. Use this when you need to understand image content, describe visual elements, or extract information from images. Provide either a local file path or URL, plus a prompt describing what to analyze.",
     inputSchema: {
@@ -194,31 +208,31 @@ export function createVisionAnalyzeTool(
       const content: ContentBlockParam[] = [];
 
       if (args.path) {
-        const imageBlock = buildImageBlock({ type: "path", value: args.path });
+        const imageBlock = buildImageBlock({ type: ImageInputType.Path, value: args.path });
         if (imageBlock !== null) {
           content.push(imageBlock);
         }
       } else if (args.url) {
-        const imageBlock = buildImageBlock({ type: "url", value: args.url });
+        const imageBlock = buildImageBlock({ type: ImageInputType.Url, value: args.url });
         if (imageBlock !== null) {
           content.push(imageBlock);
         }
       }
 
-      content.push({ type: "text", text: prompt });
+      content.push({ type: ContentBlockType.Text, text: prompt });
 
-      if (content.length === 1 && content[0]?.type === "text") {
+      if (content.length === 1 && content[0]?.type === ContentBlockType.Text) {
         return "Error: No image provided. Please specify either 'path' or 'url' parameter.";
       }
 
       log.debug("vision_analyze request", {
         model: modelConfig.visionModel,
-        hasImage: content.some((c) => c.type === "image"),
+        hasImage: content.some((c) => c.type === ContentBlockType.Image),
       });
 
       // Build request content for persistence
       const requestContent: SubagentRequestContent = {
-        type: "subagent_request",
+        type: SubagentContentType.Request,
         prompt,
       };
       if (args.path !== undefined) {
@@ -231,11 +245,11 @@ export function createVisionAnalyzeTool(
       const startMs = Date.now();
 
       // Recursion prevention: check if already being called
-      if (registry.getCallingTool() === "vision_analyze") {
+      if (registry.getCallingTool() === SubagentToolName.VisionAnalyze) {
         return "Error: vision_analyze cannot call itself recursively";
       }
 
-      registry.setCallingTool("vision_analyze");
+      registry.setCallingTool(SubagentToolName.VisionAnalyze);
 
       try {
         const response = await client.messages.create({
@@ -248,7 +262,7 @@ export function createVisionAnalyzeTool(
 
         const elapsedMs = Date.now() - startMs;
 
-        const textBlocks = response.content.filter((block) => block.type === "text");
+        const textBlocks = response.content.filter((block) => block.type === ContentBlockType.Text);
         const result = textBlocks.map((b) => b.text).join("\n");
 
         log.debug("vision_analyze response", {
@@ -260,7 +274,7 @@ export function createVisionAnalyzeTool(
         if (context !== undefined) {
           await persistSubagentCall(
             context,
-            "vision_analyze",
+            SubagentToolName.VisionAnalyze,
             requestContent,
             result,
             response,
@@ -275,7 +289,12 @@ export function createVisionAnalyzeTool(
         log.error("vision_analyze error", { error: errorMessage });
 
         if (context !== undefined) {
-          await persistSubagentError(context, "vision_analyze", requestContent, errorMessage);
+          await persistSubagentError(
+            context,
+            SubagentToolName.VisionAnalyze,
+            requestContent,
+            errorMessage,
+          );
         }
 
         return `Error: ${errorMessage}`;
@@ -292,7 +311,7 @@ export function createFastQueryTool(
   registry: ToolRegistry,
 ): Tool {
   return {
-    name: "fast_query",
+    name: SubagentToolName.FastQuery,
     description:
       "Get quick responses using a fast model. Use this for simple questions, quick lookups, or tasks that need minimal processing. Faster but less detailed than the main model.",
     inputSchema: {
@@ -311,18 +330,18 @@ export function createFastQueryTool(
       log.debug("fast_query request", { model: modelConfig.fastModel });
 
       const requestContent: SubagentRequestContent = {
-        type: "subagent_request",
+        type: SubagentContentType.Request,
         prompt: args.query,
       };
 
       const startMs = Date.now();
 
       // Recursion prevention: check if already being called
-      if (registry.getCallingTool() === "fast_query") {
+      if (registry.getCallingTool() === SubagentToolName.FastQuery) {
         return "Error: fast_query cannot call itself recursively";
       }
 
-      registry.setCallingTool("fast_query");
+      registry.setCallingTool(SubagentToolName.FastQuery);
 
       try {
         const response = await client.messages.create({
@@ -335,7 +354,7 @@ export function createFastQueryTool(
 
         const elapsedMs = Date.now() - startMs;
 
-        const textBlocks = response.content.filter((block) => block.type === "text");
+        const textBlocks = response.content.filter((block) => block.type === ContentBlockType.Text);
         const result = textBlocks.map((b) => b.text).join("\n");
 
         log.debug("fast_query response", {
@@ -346,7 +365,7 @@ export function createFastQueryTool(
         if (context !== undefined) {
           await persistSubagentCall(
             context,
-            "fast_query",
+            SubagentToolName.FastQuery,
             requestContent,
             result,
             response,
@@ -361,7 +380,12 @@ export function createFastQueryTool(
         log.error("fast_query error", { error: errorMessage });
 
         if (context !== undefined) {
-          await persistSubagentError(context, "fast_query", requestContent, errorMessage);
+          await persistSubagentError(
+            context,
+            SubagentToolName.FastQuery,
+            requestContent,
+            errorMessage,
+          );
         }
 
         return `Error: ${errorMessage}`;
@@ -378,7 +402,7 @@ export function createDeepReasoningTool(
   registry: ToolRegistry,
 ): Tool {
   return {
-    name: "deep_reasoning",
+    name: SubagentToolName.DeepReasoning,
     description:
       "Perform complex analysis using a reasoning model. Use this for multi-step reasoning, difficult problems, complex analysis, or tasks requiring deep thought. More thorough but slower.",
     inputSchema: {
@@ -405,7 +429,7 @@ export function createDeepReasoningTool(
       log.debug("deep_reasoning request", { model: modelConfig.reasoningModel });
 
       const requestContent: SubagentRequestContent = {
-        type: "subagent_request",
+        type: SubagentContentType.Request,
         prompt: args.problem,
       };
       if (args.context !== undefined) {
@@ -415,11 +439,11 @@ export function createDeepReasoningTool(
       const startMs = Date.now();
 
       // Recursion prevention: check if already being called
-      if (registry.getCallingTool() === "deep_reasoning") {
+      if (registry.getCallingTool() === SubagentToolName.DeepReasoning) {
         return "Error: deep_reasoning cannot call itself recursively";
       }
 
-      registry.setCallingTool("deep_reasoning");
+      registry.setCallingTool(SubagentToolName.DeepReasoning);
 
       try {
         const response = await client.messages.create({
@@ -432,7 +456,7 @@ export function createDeepReasoningTool(
 
         const elapsedMs = Date.now() - startMs;
 
-        const textBlocks = response.content.filter((block) => block.type === "text");
+        const textBlocks = response.content.filter((block) => block.type === ContentBlockType.Text);
         const result = textBlocks.map((b) => b.text).join("\n");
 
         log.debug("deep_reasoning response", {
@@ -443,7 +467,7 @@ export function createDeepReasoningTool(
         if (context !== undefined) {
           await persistSubagentCall(
             context,
-            "deep_reasoning",
+            SubagentToolName.DeepReasoning,
             requestContent,
             result,
             response,
@@ -458,7 +482,12 @@ export function createDeepReasoningTool(
         log.error("deep_reasoning error", { error: errorMessage });
 
         if (context !== undefined) {
-          await persistSubagentError(context, "deep_reasoning", requestContent, errorMessage);
+          await persistSubagentError(
+            context,
+            SubagentToolName.DeepReasoning,
+            requestContent,
+            errorMessage,
+          );
         }
 
         return `Error: ${errorMessage}`;

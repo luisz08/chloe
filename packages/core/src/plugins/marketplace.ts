@@ -10,7 +10,11 @@ import {
   writeInstalled,
   writeMarketplaces,
 } from "./storage.js";
-import type { MarketplacePluginEntry, MarketplaceRecord } from "./types.js";
+import {
+  type MarketplacePluginEntry,
+  type MarketplaceRecord,
+  MarketplaceSourceType,
+} from "./types.js";
 
 function tempDir(): string {
   return join(
@@ -30,7 +34,7 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
     const { name } = manifest;
 
     const existing = Object.values(marketplaces).find(
-      (m) => m.source.type === "local" && m.source.path === absPath,
+      (m) => m.source.type === MarketplaceSourceType.Local && m.source.path === absPath,
     );
     if (existing) {
       throw new Error(`Marketplace already registered: ${existing.name}`);
@@ -39,7 +43,7 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
     const record: MarketplaceRecord = {
       name,
       addedAt: new Date().toISOString(),
-      source: { type: "local", path: absPath },
+      source: { type: MarketplaceSourceType.Local, path: absPath },
       cloneDir: null,
     };
     marketplaces[name] = record;
@@ -48,7 +52,7 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
   }
 
   const existing = Object.values(marketplaces).find(
-    (m) => m.source.type === "github" && m.source.repo === source,
+    (m) => m.source.type === MarketplaceSourceType.Github && m.source.repo === source,
   );
   if (existing) {
     throw new Error(`Marketplace already registered: ${existing.name}`);
@@ -67,7 +71,7 @@ export async function addMarketplace(source: string, fromDir?: string): Promise<
     const record: MarketplaceRecord = {
       name,
       addedAt: new Date().toISOString(),
-      source: { type: "github", repo: source },
+      source: { type: MarketplaceSourceType.Github, repo: source },
       cloneDir: finalDir,
     };
     marketplaces[name] = record;
@@ -127,7 +131,7 @@ export async function updateMarketplace(name?: string): Promise<void> {
     if (!record) {
       throw new Error(`Marketplace not found: ${name}`);
     }
-    if (record.source.type === "local") {
+    if (record.source.type === MarketplaceSourceType.Local) {
       continue;
     }
     if (record.cloneDir) {
@@ -142,7 +146,10 @@ export function getMarketplacePlugins(name: string): MarketplacePluginEntry[] {
   if (!record) {
     throw new Error(`Marketplace not found: ${name}`);
   }
-  const dir = record.source.type === "local" ? record.source.path : (record.cloneDir ?? "");
+  const dir =
+    record.source.type === MarketplaceSourceType.Local
+      ? record.source.path
+      : (record.cloneDir ?? "");
   const manifest = readMarketplaceManifest(dir);
   return manifest.plugins;
 }

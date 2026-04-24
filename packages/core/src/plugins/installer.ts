@@ -10,7 +10,11 @@ import {
   readMarketplaces,
   writeInstalled,
 } from "./storage.js";
-import type { InstalledPluginRecord, PluginSourceSpec } from "./types.js";
+import {
+  type InstalledPluginRecord,
+  MarketplaceSourceType,
+  type PluginSourceSpec,
+} from "./types.js";
 
 function tempDir(label: string): string {
   return join(homedir(), ".chloe", "plugins", `.tmp-${label}-${Date.now()}`);
@@ -37,7 +41,7 @@ export async function installPlugin(pluginName: string, marketplaceName: string)
   }
 
   const mktDir =
-    marketplace.source.type === "local"
+    marketplace.source.type === MarketplaceSourceType.Local
       ? marketplace.source.path
       : (marketplace.cloneDir ?? marketplaceCloneDir(marketplaceName));
 
@@ -152,7 +156,7 @@ export async function updatePlugin(id: string): Promise<void> {
   }
 
   const mktDir =
-    marketplace.source.type === "local"
+    marketplace.source.type === MarketplaceSourceType.Local
       ? marketplace.source.path
       : (marketplace.cloneDir ?? marketplaceCloneDir(record.marketplace));
 

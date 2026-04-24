@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { PluginSkill } from "../plugins/types.js";
-import type { Skill, SkillSource } from "./types.js";
+import { type Skill, SkillSource } from "./types.js";
 
 const VALID_SKILL_NAME = /^[a-z0-9_-]+\.md$/;
 
@@ -40,8 +40,8 @@ function loadSkillsFromDir(dir: string, source: SkillSource): Map<string, Skill>
 }
 
 export async function loadSkills(globalDir: string, projectDir: string): Promise<Skill[]> {
-  const global = loadSkillsFromDir(globalDir, "global");
-  const project = loadSkillsFromDir(projectDir, "project");
+  const global = loadSkillsFromDir(globalDir, SkillSource.Global);
+  const project = loadSkillsFromDir(projectDir, SkillSource.Project);
   const merged = new Map([...global, ...project]);
   return [...merged.values()];
 }
@@ -55,7 +55,7 @@ export function mergePluginSkills(existing: Skill[], pluginSkills: PluginSkill[]
   const pluginMap = new Map(
     pluginSkills.map((s) => [
       s.name,
-      { name: s.name, content: s.content, source: "plugin" as const, description: s.description },
+      { name: s.name, content: s.content, source: SkillSource.Plugin, description: s.description },
     ]),
   );
   const existingMap = new Map(existing.map((s) => [s.name, s]));

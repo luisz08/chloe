@@ -1,3 +1,16 @@
+export const MessageRole = {
+  User: "user",
+  Assistant: "assistant",
+  Tool: "tool",
+} as const;
+export type MessageRole = (typeof MessageRole)[keyof typeof MessageRole];
+
+export const SubagentContentType = {
+  Request: "subagent_request",
+  Response: "subagent_response",
+} as const;
+export type SubagentContentType = (typeof SubagentContentType)[keyof typeof SubagentContentType];
+
 export interface Session {
   id: string;
   name: string;
@@ -15,13 +28,13 @@ export interface SessionSummary extends Session {
 export interface Message {
   id: string;
   sessionId: string;
-  role: "user" | "assistant" | "tool";
+  role: MessageRole;
   content: unknown;
   createdAt: number;
 }
 
 export interface SubagentRequestContent {
-  type: "subagent_request";
+  type: typeof SubagentContentType.Request;
   prompt: string;
   imagePath?: string;
   imageUrl?: string;
@@ -29,7 +42,7 @@ export interface SubagentRequestContent {
 }
 
 export interface SubagentResponseContent {
-  type: "subagent_response";
+  type: typeof SubagentContentType.Response;
   text: string;
   metadata: {
     api_message_id: string;
@@ -52,7 +65,7 @@ export function isSubagentRequestContent(content: unknown): content is SubagentR
   return (
     typeof content === "object" &&
     content !== null &&
-    (content as Record<string, unknown>).type === "subagent_request"
+    (content as Record<string, unknown>).type === SubagentContentType.Request
   );
 }
 
@@ -60,6 +73,6 @@ export function isSubagentResponseContent(content: unknown): content is Subagent
   return (
     typeof content === "object" &&
     content !== null &&
-    (content as Record<string, unknown>).type === "subagent_response"
+    (content as Record<string, unknown>).type === SubagentContentType.Response
   );
 }

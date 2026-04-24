@@ -5,11 +5,17 @@ import type { Tool } from "../tools/types.js";
 
 // ─── Routing Types ───────────────────────────────────────────────────────────
 
+export const ImageInputType = {
+  Path: "path",
+  Url: "url",
+} as const;
+export type ImageInputType = (typeof ImageInputType)[keyof typeof ImageInputType];
+
 /**
  * Image input detected in user message.
  */
 export interface ImageInput {
-  type: "path" | "url";
+  type: ImageInputType;
   value: string;
   mediaType?: string;
 }

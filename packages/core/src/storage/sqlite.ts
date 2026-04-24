@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { getLogger } from "../logger/index.js";
 import type { Message, Session, SessionSummary, SessionTree } from "../session/types.js";
+import type { SubagentToolName } from "../tools/subagent.js";
 import type { StorageAdapter } from "./adapter.js";
 
 const DDL = `
@@ -106,9 +107,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
       // Column already exists, ignore
     }
     try {
-      this.db.run(
-        "ALTER TABLE sessions ADD COLUMN compression_kept_from INTEGER DEFAULT NULL",
-      );
+      this.db.run("ALTER TABLE sessions ADD COLUMN compression_kept_from INTEGER DEFAULT NULL");
     } catch {
       // Column already exists, ignore
     }
@@ -230,7 +229,7 @@ export class SQLiteStorageAdapter implements StorageAdapter {
 
   async createChildSession(
     parentId: string,
-    subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+    subagentType: SubagentToolName,
     title: string,
   ): Promise<Session> {
     const id = `${parentId}-${subagentType}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;

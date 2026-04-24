@@ -3,6 +3,9 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { getLogger } from "../logger/index.js";
 import { HookRegistry } from "../plugins/hooks.js";
 import { loadInstalledPlugins } from "../plugins/loader.js";
+import { HookEvent } from "../plugins/types.js";
+import { ContentBlockType } from "../providers/anthropic.js";
+import { MessageRole } from "../session/types.js";
 import { createDefaultTools, createSubagentTools, loadToolSettings } from "../tools/index.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { Tool, ToolContext } from "../tools/types.js";
@@ -112,8 +115,8 @@ export class Agent {
 
       // Ensure session exists
       let session = await storage.getSession(sessionId);
-      void this.hookRegistry.fire("SessionStart", {
-        event: "SessionStart",
+      void this.hookRegistry.fire(HookEvent.SessionStart, {
+        event: HookEvent.SessionStart,
         sessionId,
         pluginRoot: "",
       });
@@ -130,7 +133,7 @@ export class Agent {
 
       // Build user message content: text + image blocks if present
       const userContent: MessageParam["content"] = hasImages
-        ? [{ type: "text", text: userMessage }, ...imageBlocks]
+        ? [{ type: ContentBlockType.Text, text: userMessage }, ...imageBlocks]
         : userMessage;
 
       messages.push({ role: "user", content: userContent });
@@ -198,7 +201,7 @@ export class Agent {
       // Persist the new messages (user + assistant turns added by the loop)
       const newMessages = result.messages.slice(messages.length - 1);
       for (const msg of newMessages) {
-        const role = msg.role === "user" ? "user" : "assistant";
+        const role = msg.role === MessageRole.User ? MessageRole.User : MessageRole.Assistant;
         await storage.appendMessage(sessionId, role, msg.content);
       }
 
@@ -211,8 +214,8 @@ export class Agent {
       log.error("run failed", { session: sessionId, error });
       throw err;
     } finally {
-      void this.hookRegistry.fire("SessionEnd", {
-        event: "SessionEnd",
+      void this.hookRegistry.fire(HookEvent.SessionEnd, {
+        event: HookEvent.SessionEnd,
         sessionId,
         pluginRoot: "",
       });

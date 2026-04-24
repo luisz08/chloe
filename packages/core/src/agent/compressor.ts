@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam } from "@anthropic-ai/sdk/resources/messages";
+import { ContentBlockType } from "../providers/anthropic.js";
 import { getContextLimit } from "./models.js";
 
 export interface CompressorOptions {
@@ -27,19 +28,19 @@ function countTokensLocal(messages: MessageParam[], system?: string): number {
       chars += msg.content.length;
     } else {
       for (const block of msg.content as ContentBlockParam[]) {
-        if (block.type === "text") {
+        if (block.type === ContentBlockType.Text) {
           chars += block.text.length;
-        } else if (block.type === "image") {
+        } else if (block.type === ContentBlockType.Image) {
           chars += 3500; // ~1000 tokens for a typical image
-        } else if (block.type === "tool_use") {
+        } else if (block.type === ContentBlockType.ToolUse) {
           chars += block.name.length + JSON.stringify(block.input).length;
-        } else if (block.type === "tool_result") {
+        } else if (block.type === ContentBlockType.ToolResult) {
           const c = block.content;
           if (typeof c === "string") {
             chars += c.length;
           } else if (Array.isArray(c)) {
             for (const inner of c) {
-              if (inner.type === "text") chars += inner.text.length;
+              if (inner.type === ContentBlockType.Text) chars += inner.text.length;
             }
           }
         }
@@ -110,8 +111,8 @@ export async function compressIfNeeded(
     ],
   });
 
-  const textBlock = summaryResponse.content.find((b) => b.type === "text");
-  if (textBlock === undefined || textBlock.type !== "text") {
+  const textBlock = summaryResponse.content.find((b) => b.type === ContentBlockType.Text);
+  if (textBlock === undefined || textBlock.type !== ContentBlockType.Text) {
     throw new Error("Summarization response was not text");
   }
   const summaryText = textBlock.text;

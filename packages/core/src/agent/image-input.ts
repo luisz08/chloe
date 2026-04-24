@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { getLogger } from "../logger/index.js";
 import { SUPPORTED_IMAGE_EXTENSIONS } from "./router.js";
-import type { ImageInput } from "./types.js";
+import { type ImageInput, ImageInputType } from "./types.js";
 
 const log = getLogger("image-input");
 
@@ -67,7 +67,7 @@ export function detectImages(text: string): ImageInput[] {
     const normalizedValue = isUrl ? value : value.replace(/\\/g, "/");
 
     images.push({
-      type: isUrl ? "url" : "path",
+      type: isUrl ? ImageInputType.Url : ImageInputType.Path,
       value: normalizedValue,
     });
     seen.add(value);
@@ -75,7 +75,7 @@ export function detectImages(text: string): ImageInput[] {
     log.debug("image detected", {
       original: value,
       normalized: normalizedValue,
-      type: isUrl ? "url" : "path",
+      type: isUrl ? ImageInputType.Url : ImageInputType.Path,
     });
   }
 
@@ -132,7 +132,7 @@ export async function toContentBlocks(images: ImageInput[]): Promise<ImageConten
 
   for (const image of images) {
     try {
-      if (image.type === "path") {
+      if (image.type === ImageInputType.Path) {
         // Local file - check existence and read
         if (!existsSync(image.value)) {
           log.warn("image path does not exist", { path: image.value });

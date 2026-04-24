@@ -4,22 +4,18 @@ import { getLogger } from "../logger/index.js";
 import { extractDescription } from "../skills/loader.js";
 import { readPluginManifest } from "./manifest.js";
 import { readInstalled } from "./storage.js";
-import type {
-  HookEntry,
+import {
+  type HookEntry,
+  HookEntryType,
   HookEvent,
-  InstalledPluginRecord,
-  LoadedPlugin,
-  PluginSkill,
+  type InstalledPluginRecord,
+  type LoadedPlugin,
+  type PluginSkill,
+  SkillSource,
 } from "./types.js";
 
 const VALID_COMMAND_NAME = /^[a-z0-9_-]+\.md$/;
-const VALID_HOOK_EVENTS = new Set<string>([
-  "SessionStart",
-  "SessionEnd",
-  "PreToolUse",
-  "PostToolUse",
-  "UserPromptSubmit",
-]);
+const VALID_HOOK_EVENTS = new Set<string>(Object.values(HookEvent));
 
 export async function loadInstalledPlugins(): Promise<LoadedPlugin[]> {
   const installed = readInstalled();
@@ -63,7 +59,7 @@ export function discoverSkills(cacheDir: string, pluginId: string): PluginSkill[
           skills.push({
             name: entry,
             content,
-            source: "plugin",
+            source: SkillSource.Plugin,
             description: extractDescription(content),
             pluginId,
           });
@@ -89,7 +85,7 @@ export function discoverSkills(cacheDir: string, pluginId: string): PluginSkill[
         skills.push({
           name,
           content,
-          source: "plugin",
+          source: SkillSource.Plugin,
           description: extractDescription(content),
           pluginId,
         });
@@ -154,10 +150,10 @@ export function loadHooks(cacheDir: string, pluginId: string): HookEntry[] {
     for (const group of groups) {
       if (!Array.isArray(group.hooks)) continue;
       for (const hook of group.hooks) {
-        if (hook.type !== "command") continue;
+        if (hook.type !== HookEntryType.Command) continue;
         const entry: HookEntry = {
           event,
-          type: "command",
+          type: HookEntryType.Command,
           command: hook.command,
           pluginId,
         };

@@ -1,6 +1,14 @@
+import { SkillSource } from "../skills/types.js";
+export { SkillSource };
+
+export const MarketplaceSourceType = {
+  Github: "github",
+  Local: "local",
+} as const;
+
 export type MarketplaceSource =
-  | { type: "github"; repo: string; ref?: string }
-  | { type: "local"; path: string };
+  | { type: typeof MarketplaceSourceType.Github; repo: string; ref?: string }
+  | { type: typeof MarketplaceSourceType.Local; path: string };
 
 export type PluginSourceSpec = string | { source: "github"; repo: string; ref?: string };
 
@@ -49,7 +57,7 @@ export interface InstalledPluginRecord {
 export interface PluginSkill {
   name: string;
   content: string;
-  source: "plugin";
+  source: typeof SkillSource.Plugin;
   description: string;
   pluginId: string;
 }
@@ -62,17 +70,23 @@ export interface LoadedPlugin {
   hooks: HookEntry[];
 }
 
-export type HookEvent =
-  | "SessionStart"
-  | "SessionEnd"
-  | "PreToolUse"
-  | "PostToolUse"
-  | "UserPromptSubmit";
+export const HookEvent = {
+  SessionStart: "SessionStart",
+  SessionEnd: "SessionEnd",
+  PreToolUse: "PreToolUse",
+  PostToolUse: "PostToolUse",
+  UserPromptSubmit: "UserPromptSubmit",
+} as const;
+export type HookEvent = (typeof HookEvent)[keyof typeof HookEvent];
+
+export const HookEntryType = {
+  Command: "command",
+} as const;
 
 export interface HookEntry {
   event: HookEvent;
   matcher?: string;
-  type: "command";
+  type: typeof HookEntryType.Command;
   command: string;
   pluginId: string;
 }

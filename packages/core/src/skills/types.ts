@@ -1,4 +1,9 @@
-export type SkillSource = "global" | "project" | "plugin";
+export const SkillSource = {
+  Global: "global",
+  Project: "project",
+  Plugin: "plugin",
+} as const;
+export type SkillSource = (typeof SkillSource)[keyof typeof SkillSource];
 
 export interface Skill {
   name: string;

@@ -13,6 +13,7 @@ import {
   removeMarketplace,
   updateMarketplace,
 } from "../plugins/marketplace.js";
+import { MarketplaceSourceType } from "../plugins/types.js";
 import { expandArguments, loadSkills, mergePluginSkills } from "./loader.js";
 import type { CommandResult } from "./types.js";
 
@@ -120,7 +121,8 @@ async function handlePluginSlashCommand(args: string): Promise<string> {
       if (list.length === 0) return "No marketplaces registered.";
       return list
         .map((m) => {
-          const src = m.source.type === "github" ? m.source.repo : m.source.path;
+          const src =
+            m.source.type === MarketplaceSourceType.Github ? m.source.repo : m.source.path;
           return `${m.name}  ${src}`;
         })
         .join("\n");

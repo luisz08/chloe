@@ -1,4 +1,5 @@
 import type { Message, Session, SessionSummary, SessionTree } from "../session/types.js";
+import type { SubagentToolName } from "../tools/subagent.js";
 
 export interface StorageAdapter {
   createSession(id: string, name: string): Promise<Session>;
@@ -16,7 +17,7 @@ export interface StorageAdapter {
 
   createChildSession(
     parentId: string,
-    subagentType: "vision_analyze" | "fast_query" | "deep_reasoning",
+    subagentType: SubagentToolName,
     title: string,
   ): Promise<Session>;
 
