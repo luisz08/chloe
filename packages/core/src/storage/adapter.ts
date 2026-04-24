@@ -28,4 +28,5 @@ export interface StorageAdapter {
 
   getSessionSummary(id: string): Promise<string | null>;
   setSessionSummary(id: string, summary: string): Promise<void>;
+  setCompressionKeptFrom(sessionId: string, timestamp: number): Promise<void>;
 }

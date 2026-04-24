@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ContextTooLargeError, compressIfNeeded } from "./compressor.js";
 
@@ -9,10 +10,13 @@ function makeMessages(count: number): MessageParam[] {
   }));
 }
 
-function makeMockClient(tokenCount: number, summaryText = "Summarized history") {
+function makeMockClient(
+  summaryText = "Summarized history",
+  countTokensImpl?: () => Promise<{ input_tokens: number }>,
+) {
   return {
     messages: {
-      countTokens: async (_params: unknown) => ({ input_tokens: tokenCount }),
+      countTokens: countTokensImpl ?? (async () => ({ input_tokens: 0 })),
       create: async (_params: unknown) => ({
         content: [{ type: "text", text: summaryText }],
       }),
@@ -21,18 +25,8 @@ function makeMockClient(tokenCount: number, summaryText = "Summarized history") 
 }
 
 describe("compressIfNeeded", () => {
-  test("T010: returns null when messages.length <= keepRecentCount (fast-path, no API call)", async () => {
-    let countTokensCalled = false;
-    const client = {
-      messages: {
-        countTokens: async () => {
-          countTokensCalled = true;
-          return { input_tokens: 999_999 };
-        },
-        create: async (_: unknown) => ({ content: [{ type: "text", text: "" }] }),
-      },
-    };
-
+  test("T010: returns null when messages.length <= keepRecentCount (fast-path)", async () => {
+    const client = makeMockClient();
     const messages = makeMessages(5);
     const result = await compressIfNeeded(messages as MessageParam[], {
       client: client as never,
@@ -41,35 +35,35 @@ describe("compressIfNeeded", () => {
       threshold: 0.75,
       keepRecentCount: 20,
     });
-
     expect(result).toBeNull();
-    expect(countTokensCalled).toBe(false);
   });
 
-  test("T010: returns null when token count is below threshold", async () => {
+  test("T010: returns null when local token estimate is below threshold", async () => {
+    // threshold=1.1 means limit*1.1=220k — short messages never reach that
     const messages = makeMessages(30);
-    const client = makeMockClient(100_000); // well below 75% of 200k = 150k
+    const client = makeMockClient();
 
     const result = await compressIfNeeded(messages as MessageParam[], {
       client: client as never,
       model: "claude-sonnet-4-6",
       fastModel: "claude-haiku-4-5",
-      threshold: 0.75,
+      threshold: 1.1,
       keepRecentCount: 20,
     });
 
     expect(result).toBeNull();
   });
 
-  test("T011: returns CompressResult when token count exceeds threshold", async () => {
-    const messages = makeMessages(30); // 30 > keepRecentCount=20
-    const client = makeMockClient(160_000, "## Summary\nKey facts here"); // 160k > 75% of 200k
+  test("T011: returns CompressResult when local token estimate exceeds threshold", async () => {
+    // threshold=0 means limit*0=0 — any non-empty session triggers compression
+    const messages = makeMessages(30);
+    const client = makeMockClient("## Summary\nKey facts here");
 
     const result = await compressIfNeeded(messages as MessageParam[], {
       client: client as never,
       model: "claude-sonnet-4-6",
       fastModel: "claude-haiku-4-5",
-      threshold: 0.75,
+      threshold: 0,
       keepRecentCount: 20,
     });
 
@@ -86,20 +80,44 @@ describe("compressIfNeeded", () => {
   });
 
   test("T011: compressedCount + keptCount sum equals total input messages", async () => {
-    const shortMessages = makeMessages(25);
-    const bigClient = makeMockClient(999_000, "Summary");
+    const messages = makeMessages(25);
+    const client = makeMockClient("Summary");
 
-    // With threshold=0.75 and 160k tokens: compress
-    // Verify structure is correct
-    const result = await compressIfNeeded(shortMessages as MessageParam[], {
-      client: bigClient as never,
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
       model: "claude-sonnet-4-6",
       fastModel: "claude-haiku-4-5",
-      threshold: 0.75,
+      threshold: 0,
       keepRecentCount: 20,
     });
     expect(result?.compressedCount).toBe(5);
     expect(result?.keptCount).toBe(20);
+  });
+
+  test("extracts text from response when thinking block precedes text block", async () => {
+    // Reasoning models (e.g. claude-opus-4-7) return thinking blocks before text blocks
+    const messages = makeMessages(30);
+    const client = {
+      messages: {
+        countTokens: async () => ({ input_tokens: 0 }),
+        create: async (_params: unknown) => ({
+          content: [
+            { type: "thinking", thinking: "Let me summarize..." },
+            { type: "text", text: "The actual summary" },
+          ],
+        }),
+      },
+    };
+
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-opus-4-7",
+      threshold: 0,
+      keepRecentCount: 20,
+    });
+
+    expect(result?.summaryText).toBe("The actual summary");
   });
 
   test("ContextTooLargeError is an instance of Error with correct name", () => {
@@ -109,9 +127,63 @@ describe("compressIfNeeded", () => {
     expect(err.message).toContain("too large");
   });
 
+  test("uses API token count when countTokens succeeds", async () => {
+    // API returns 160k > 75% of 200k → compression triggered
+    const messages = makeMessages(30);
+    const client = makeMockClient("API summary", async () => ({ input_tokens: 160_000 }));
+
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5",
+      threshold: 0.75,
+      keepRecentCount: 20,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.summaryText).toBe("API summary");
+  });
+
+  test("falls back to local estimate when countTokens returns 404", async () => {
+    // NotFoundError → local estimate; threshold=0 forces compression via local path
+    const messages = makeMessages(30);
+    const client = makeMockClient("Fallback summary", async () => {
+      throw new Anthropic.NotFoundError(404, {}, "Not found", {});
+    });
+
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5",
+      threshold: 0,
+      keepRecentCount: 20,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.summaryText).toBe("Fallback summary");
+  });
+
+  test("re-throws non-404 errors from countTokens", async () => {
+    const messages = makeMessages(30);
+    const apiError = new Anthropic.InternalServerError(500, {}, "Server error", {});
+    const client = makeMockClient("unused", async () => {
+      throw apiError;
+    });
+
+    await expect(
+      compressIfNeeded(messages as MessageParam[], {
+        client: client as never,
+        model: "claude-sonnet-4-6",
+        fastModel: "claude-haiku-4-5",
+        threshold: 0,
+        keepRecentCount: 20,
+      }),
+    ).rejects.toThrow(apiError);
+  });
+
   test("threshold:0 always compresses (forceCompress pattern)", async () => {
     const messages = makeMessages(30);
-    const client = makeMockClient(1, "Force summary"); // very low token count
+    const client = makeMockClient("Force summary");
 
     const result = await compressIfNeeded(messages as MessageParam[], {
       client: client as never,

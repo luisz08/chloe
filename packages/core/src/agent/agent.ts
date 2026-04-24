@@ -159,6 +159,15 @@ export class Agent {
 
       if (compressResult !== null) {
         await storage.setSessionSummary(sessionId, compressResult.summaryText);
+
+        // Record the oldest kept DB message's timestamp so subsequent loads skip the archived messages.
+        // keptCount includes the new_user message (not yet in DB), so DB-kept count = keptCount - 1.
+        const dbKeptCount = Math.min(compressResult.keptCount - 1, history.length);
+        const cutoffMsg = history[history.length - dbKeptCount] ?? history[0];
+        if (cutoffMsg !== undefined) {
+          await storage.setCompressionKeptFrom(sessionId, cutoffMsg.createdAt);
+        }
+
         messages.length = 0;
         messages.push(...compressResult.messages);
         callbacks.onContextCompressed?.({

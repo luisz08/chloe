@@ -119,6 +119,9 @@ function makeMemoryStorage(): StorageAdapter {
     async setSessionSummary(_id: string, _summary: string) {
       // no-op in memory mock
     },
+    async setCompressionKeptFrom(_sessionId: string, _timestamp: number) {
+      // no-op in memory mock
+    },
   };
 }
 

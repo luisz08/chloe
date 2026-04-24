@@ -105,6 +105,13 @@ export class SQLiteStorageAdapter implements StorageAdapter {
     } catch {
       // Column already exists, ignore
     }
+    try {
+      this.db.run(
+        "ALTER TABLE sessions ADD COLUMN compression_kept_from INTEGER DEFAULT NULL",
+      );
+    } catch {
+      // Column already exists, ignore
+    }
   }
 
   async createSession(id: string, name: string): Promise<Session> {
@@ -187,17 +194,38 @@ export class SQLiteStorageAdapter implements StorageAdapter {
   }
 
   async getMessages(sessionId: string): Promise<Message[]> {
-    const rows = this.db
-      .prepare<MessageRow, string>(
-        "SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+    const cutoffRow = this.db
+      .prepare<{ compression_kept_from: number | null }, string>(
+        "SELECT compression_kept_from FROM sessions WHERE id = ?",
       )
-      .all(sessionId);
+      .get(sessionId);
+    const cutoff = cutoffRow?.compression_kept_from ?? null;
+
+    const rows =
+      cutoff !== null
+        ? this.db
+            .prepare<MessageRow, [string, number]>(
+              "SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = ? AND created_at >= ? ORDER BY created_at ASC",
+            )
+            .all(sessionId, cutoff)
+        : this.db
+            .prepare<MessageRow, string>(
+              "SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+            )
+            .all(sessionId);
+
     const messages = rows.map(rowToMessage);
     getLogger("storage").debug("session loaded", {
       session: sessionId,
       message_count: messages.length,
     });
     return messages;
+  }
+
+  async setCompressionKeptFrom(sessionId: string, timestamp: number): Promise<void> {
+    this.db
+      .prepare("UPDATE sessions SET compression_kept_from = ? WHERE id = ?")
+      .run(timestamp, sessionId);
   }
 
   async createChildSession(
