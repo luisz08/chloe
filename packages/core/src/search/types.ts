@@ -6,6 +6,7 @@ export interface SearchResult {
 
 export interface SearchOptions {
   maxResults?: number;
+  notify?: (message: string) => void;
 }
 
 export interface SearchProvider {

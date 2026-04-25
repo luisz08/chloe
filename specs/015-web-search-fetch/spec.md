@@ -66,7 +66,7 @@ A power user switches from DuckDuckGo to Brave Search by adding their API key to
 
 - **FR-001**: A `web_search` agent tool MUST accept `query: string` and optional `max_results: number` (default 5, max 20).
 - **FR-002**: `web_search` MUST return an array of `{ title: string, url: string, snippet: string }` objects.
-- **FR-003**: `web_search` MUST use DuckDuckGo as the default provider via a pure TypeScript HTTP implementation (no Python, no subprocess).
+- **FR-003**: `web_search` MUST use DuckDuckGo as the default provider via Python's `ddgs` library invoked as a Bun subprocess (`Bun.spawn`).
 - **FR-004**: A `web_fetch` agent tool MUST accept `url: string`, optional `process: boolean` (default `true`), and optional `prompt: string`.
 - **FR-005**: `web_fetch` MUST convert HTML to Markdown using `node-html-parser` + `turndown` before any further processing.
 - **FR-006**: When `process: true`, `web_fetch` MUST pass the Markdown content to the configured fast model along with the `prompt` (defaulting to `"Summarize the key information from this web page content concisely."`).
@@ -75,12 +75,17 @@ A power user switches from DuckDuckGo to Brave Search by adding their API key to
 - **FR-009**: A `getSearchProvider(config)` factory MUST select the provider based on `config.search.provider` (default `"duckduckgo"`).
 - **FR-010**: The TOML config MUST support a `[search]` section with at minimum a `provider` field and an optional `brave_api_key` field for the Brave provider. The `ChloeConfig` interface in `core/src/config.ts` MUST be extended with a `search: SearchConfig` field.
 - **FR-011**: Before passing content to the fast model, `web_fetch` MUST truncate Markdown to a maximum of 50,000 characters to stay within model context limits.
+- **FR-012**: Before executing a DuckDuckGo search, `DuckDuckGoProvider` MUST detect a Python ≥3.8 executable (`python3` or `python`). If none is found or the version is too old, `web_search` MUST return an error message instructing the user to install Python.
+- **FR-013**: `DuckDuckGoProvider` MUST check if the `ddgs` package is importable before running a search. If not, it MUST automatically install `ddgs` via `[pythonPath, "-m", "pip", "install", "ddgs"]`, log installation details to the logger, and notify the caller via `options.notify` with a human-readable message.
+- **FR-014**: `DuckDuckGoProvider` MUST call Python via `Bun.spawn([pythonPath, "-c", inlineScript])` where the inline script uses `DDGS().text()` and prints results as a JSON array to stdout. Each result MUST map `r["title"]`, `r["href"]`, `r.get("body","")` to `{ title, url, snippet }`.
+- **FR-015**: Python detection and `ddgs` availability MUST be cached per `DuckDuckGoProvider` instance to avoid re-checking on every search call.
+- **FR-016**: Brave Search remains a supported alternative provider (requires `brave_api_key`). The `SearchProvider` interface and `getSearchProvider` factory remain unchanged.
 
 ### Key Entities
 
 - **SearchProvider**: Interface with `search(query, options) → Promise<SearchResult[]>`.
 - **SearchResult**: `{ title: string, url: string, snippet: string }`.
-- **SearchOptions**: `{ maxResults?: number }`.
+- **SearchOptions**: `{ maxResults?: number; notify?: (message: string) => void }`.
 
 ## Success Criteria
 
@@ -90,13 +95,14 @@ A power user switches from DuckDuckGo to Brave Search by adding their API key to
 - **SC-002**: `web_fetch` with `process: false` returns Markdown content in under 5 seconds.
 - **SC-003**: `web_fetch` with `process: true` returns a processed response in under 15 seconds.
 - **SC-004**: All existing tests continue to pass after adding the new tools.
-- **SC-005**: No Python dependency is introduced; the feature works in a standalone Bun binary.
+- **SC-005**: Python ≥3.8 and the `ddgs` package are required for DuckDuckGo search. Clear, actionable error messages guide users through setup. The `ddgs` package is auto-installed on first use.
 
 ## Assumptions
 
 - The project's Bun runtime can install `node-html-parser` and `turndown` as npm dependencies.
 - The fast model slot (`config.fastModel`) is already configured; `web_fetch` reuses it without introducing a new config key.
-- DuckDuckGo's HTML search endpoint remains accessible; if they rate-limit or block, the provider can be swapped at config level.
-- Brave and Tavily provider implementations are out of scope for this spec — only the interface and factory need to be in place.
+- Python ≥3.8 is available on the user's system (standard on macOS/Linux developer machines). The `ddgs` package is auto-installed on first use.
+- Brave Search is a supported alternative for users who prefer an API-key based approach or do not have Python available.
+- Tavily provider implementation remains out of scope; only the interface and factory need to be in place.
 - `web_search` and `web_fetch` are registered as agent tools (in `packages/core/src/tools/`), not as CLI subcommands.
 - The search module lives at `packages/core/src/search/` and is internal to core.

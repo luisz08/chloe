@@ -1,39 +1,63 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { createWebSearchTool } from "./web-search.js";
 
-function buildHtml(count: number): string {
-  const items = Array.from(
-    { length: count },
-    (_, i) => `
-    <div class="result-wrapper">
-      <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2F${i + 1}">Result ${i + 1}</a></h2>
-      <div class="result">
-        <a class="result__url" href="/l/?uddg=https%3A%2F%2Fexample.com%2F${i + 1}">example.com</a>
-        <p>Snippet ${i + 1}</p>
-      </div>
-    </div>`,
-  ).join("");
-  return `<html><body>${items}</body></html>`;
+type SpawnCall = Parameters<typeof Bun.spawn>;
+
+function makeSpawnResult(
+  exitCode: number,
+  stdout: string,
+  stderr = "",
+): ReturnType<typeof Bun.spawn> {
+  return {
+    exited: Promise.resolve(exitCode),
+    exitCode,
+    stdout: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(stdout));
+        c.close();
+      },
+    }),
+    stderr: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(stderr));
+        c.close();
+      },
+    }),
+  } as unknown as ReturnType<typeof Bun.spawn>;
 }
 
-let originalFetch: typeof fetch;
+function buildResults(count: number): string {
+  return JSON.stringify(
+    Array.from({ length: count }, (_, i) => ({
+      title: `Result ${i + 1}`,
+      url: `https://example.com/${i + 1}`,
+      snippet: `Snippet ${i + 1}`,
+    })),
+  );
+}
+
+let spawnSpy: ReturnType<typeof spyOn<typeof Bun, "spawn">>;
 
 beforeEach(() => {
-  originalFetch = global.fetch;
+  spawnSpy = spyOn(Bun, "spawn");
 });
 
 afterEach(() => {
-  global.fetch = originalFetch;
+  spawnSpy.mockRestore();
 });
 
-function mockFetchWithHtml(html: string): void {
-  global.fetch = mock(() =>
-    Promise.resolve({
-      text: () => Promise.resolve(html),
-      ok: true,
-      status: 200,
-    } as Response),
-  ) as unknown as typeof fetch;
+// Simulate python3 found, ddgs installed, search returns N results
+function mockSearchSuccess(resultJson: string): void {
+  let callIndex = 0;
+  spawnSpy.mockImplementation((..._args: SpawnCall) => {
+    const responses = [
+      { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+      { exitCode: 0, stdout: "" }, // import ddgs
+      { exitCode: 0, stdout: resultJson }, // search script
+    ];
+    const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
+    return makeSpawnResult(r.exitCode, r.stdout);
+  });
 }
 
 describe("createWebSearchTool", () => {
@@ -41,7 +65,7 @@ describe("createWebSearchTool", () => {
 
   describe("returns JSON array of results", () => {
     it("returns a JSON string of results from the provider", async () => {
-      mockFetchWithHtml(buildHtml(5));
+      mockSearchSuccess(buildResults(5));
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "hello world" });
@@ -73,7 +97,7 @@ describe("createWebSearchTool", () => {
 
   describe("max_results clamping", () => {
     it("clamps max_results to 20 when a larger value is provided", async () => {
-      mockFetchWithHtml(buildHtml(25));
+      mockSearchSuccess(buildResults(20));
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "test", max_results: 50 });
@@ -83,7 +107,7 @@ describe("createWebSearchTool", () => {
     });
 
     it("clamps max_results to at least 1 when 0 is provided", async () => {
-      mockFetchWithHtml(buildHtml(5));
+      mockSearchSuccess(buildResults(1));
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "test", max_results: 0 });
@@ -93,13 +117,53 @@ describe("createWebSearchTool", () => {
     });
 
     it("uses default of 5 when max_results is omitted", async () => {
-      mockFetchWithHtml(buildHtml(10));
+      mockSearchSuccess(buildResults(5));
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "test" });
 
       const parsed = JSON.parse(output) as Array<unknown>;
       expect(parsed.length).toBe(5);
+    });
+  });
+
+  describe("ddgs auto-install notice", () => {
+    it("prefixes output with Notice: when ddgs was auto-installed", async () => {
+      let callIndex = 0;
+      spawnSpy.mockImplementation((..._args: SpawnCall) => {
+        const responses = [
+          { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+          { exitCode: 1, stdout: "", stderr: "No module named ddgs" }, // import ddgs fails
+          { exitCode: 0, stdout: "" }, // pip install ddgs
+          { exitCode: 0, stdout: buildResults(2) }, // search
+        ];
+        const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
+        return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
+      });
+
+      const tool = createWebSearchTool(searchConfig);
+      const output = await tool.execute({ query: "test" });
+
+      expect(output).toContain("Notice:");
+      expect(output).toContain("ddgs");
+      // JSON results follow the notice line
+      const jsonPart = output.slice(output.indexOf("["));
+      const parsed = JSON.parse(jsonPart) as Array<unknown>;
+      expect(parsed.length).toBe(2);
+    });
+  });
+
+  describe("Python not available", () => {
+    it("returns Error string when Python is not on PATH", async () => {
+      spawnSpy.mockImplementation((..._args: SpawnCall) => {
+        throw new Error("spawn ENOENT");
+      });
+
+      const tool = createWebSearchTool(searchConfig);
+      const output = await tool.execute({ query: "test" });
+
+      expect(output).toContain("Error");
+      expect(output).toContain("Python");
     });
   });
 });

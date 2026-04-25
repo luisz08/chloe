@@ -44,7 +44,16 @@ export function createWebSearchTool(searchConfig: SearchConfig): Tool {
 
       try {
         const provider = getSearchProvider(searchConfig);
-        const results = await provider.search(query.trim(), { maxResults });
+        let notice: string | null = null;
+        const results = await provider.search(query.trim(), {
+          maxResults,
+          notify: (msg) => {
+            notice = msg;
+          },
+        });
+        if (notice) {
+          return `Notice: ${notice}\n${JSON.stringify(results)}`;
+        }
         return JSON.stringify(results);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

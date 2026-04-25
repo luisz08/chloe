@@ -1,219 +1,193 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { DuckDuckGoProvider } from "./duckduckgo.js";
 
-// Reflects current DDG HTML structure: titles in <h2>, URL display in result__url,
-// snippet optionally in .result__snippet or <p>.
-function buildDdgHtml(results: Array<{ title: string; href: string; snippet?: string }>): string {
-  const items = results
-    .map(
-      ({ title, href, snippet }) => `
-    <div class="result-wrapper">
-      <h2 style="font-size:large"><a href="${href}">${title}</a></h2>
-      <div class="result">
-        <a class="result__url" href="${href}">example.com</a>
-        ${snippet ? `<p>${snippet}</p>` : ""}
-      </div>
-    </div>`,
-    )
-    .join("\n");
-  return `<html><body>${items}</body></html>`;
+// Helper to build a fake Bun.spawn result
+function makeSpawnResult(
+  exitCode: number,
+  stdout: string,
+  stderr = "",
+): ReturnType<typeof Bun.spawn> {
+  return {
+    exited: Promise.resolve(exitCode),
+    exitCode,
+    stdout: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(stdout));
+        c.close();
+      },
+    }),
+    stderr: new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(stderr));
+        c.close();
+      },
+    }),
+  } as unknown as ReturnType<typeof Bun.spawn>;
 }
 
-const MINIMAL_HTML = buildDdgHtml([
-  {
-    title: "First Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage1",
-    snippet: "Snippet for first result",
-  },
-  {
-    title: "Second Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage2",
-    snippet: "Snippet for second result",
-  },
-  {
-    title: "Third Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage3",
-    snippet: "Snippet for third result",
-  },
-  {
-    title: "Fourth Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage4",
-    snippet: "Snippet for fourth result",
-  },
-  {
-    title: "Fifth Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage5",
-    snippet: "Snippet for fifth result",
-  },
-  {
-    title: "Sixth Result",
-    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage6",
-    snippet: "Snippet for sixth result",
-  },
-]);
+type SpawnCall = Parameters<typeof Bun.spawn>;
 
-// DDG redirect URL that needs decoding
-const DDG_REDIRECT_HTML = buildDdgHtml([
-  {
-    title: "Redirected Result",
-    href: "/l/?uddg=https%3A%2F%2Fwww.real-site.com%2Farticle",
-    snippet: "A snippet for redirected result",
-  },
-]);
-
-// Mix of y.js ad URL and a valid result
-const YJS_FILTER_HTML = `
-<html><body>
-  <div class="result-wrapper">
-    <h2><a href="https://duckduckgo.com/y.js?ad_domain=example.com">Ad Result</a></h2>
-    <div class="result"><p>Ad snippet</p></div>
-  </div>
-  <div class="result-wrapper">
-    <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2Fvalid">Valid Result</a></h2>
-    <div class="result"><p>Valid snippet</p></div>
-  </div>
-</body></html>`;
-
-// Verify result__url links (NOT in <h2>) are ignored as titles
-const URL_DISPLAY_ONLY_HTML = `
-<html><body>
-  <div class="result-wrapper">
-    <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2Freal">Real Title</a></h2>
-    <div class="result">
-      <a class="result__url" href="/l/?uddg=https%3A%2F%2Fexample.com%2Freal">example.com</a>
-      <p>Snippet text</p>
-    </div>
-  </div>
-</body></html>`;
-
-let originalFetch: typeof fetch;
+let spawnSpy: ReturnType<typeof spyOn<typeof Bun, "spawn">>;
 
 beforeEach(() => {
-  originalFetch = global.fetch;
+  spawnSpy = spyOn(Bun, "spawn");
 });
 
 afterEach(() => {
-  global.fetch = originalFetch;
+  spawnSpy.mockRestore();
 });
 
-function mockFetchWithHtml(html: string): void {
-  global.fetch = mock(() =>
-    Promise.resolve({
-      text: () => Promise.resolve(html),
-      ok: true,
-      status: 200,
-    } as Response),
-  ) as unknown as typeof fetch;
+function mockSpawnSequence(
+  responses: Array<{ exitCode: number; stdout: string; stderr?: string }>,
+) {
+  let callIndex = 0;
+  spawnSpy.mockImplementation((..._args: SpawnCall) => {
+    const r = responses[callIndex++] ?? { exitCode: 0, stdout: "", stderr: "" };
+    return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
+  });
 }
 
+const SEARCH_RESULTS = JSON.stringify([
+  { title: "Result 1", url: "https://example.com/1", snippet: "Snippet 1" },
+  { title: "Result 2", url: "https://example.com/2", snippet: "Snippet 2" },
+]);
+
 describe("DuckDuckGoProvider", () => {
-  describe("normal HTML results", () => {
-    it("returns correct SearchResult[] from HTML fixture", async () => {
-      mockFetchWithHtml(MINIMAL_HTML);
+  describe("successful search", () => {
+    it("returns parsed SearchResult[] from Python subprocess stdout", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+        { exitCode: 0, stdout: "" }, // import ddgs check
+        { exitCode: 0, stdout: SEARCH_RESULTS }, // search script
+      ]);
 
       const provider = new DuckDuckGoProvider();
       const results = await provider.search("test query");
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(2);
       expect(results[0]).toEqual({
-        title: "First Result",
-        url: "https://example.com/page1",
-        snippet: "Snippet for first result",
-      });
-      expect(results[4]).toEqual({
-        title: "Fifth Result",
-        url: "https://example.com/page5",
-        snippet: "Snippet for fifth result",
+        title: "Result 1",
+        url: "https://example.com/1",
+        snippet: "Snippet 1",
       });
     });
 
-    it("does not treat result__url anchors as titles", async () => {
-      mockFetchWithHtml(URL_DISPLAY_ONLY_HTML);
+    it("passes maxResults to the Python script", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.11.0\n" },
+        { exitCode: 0, stdout: "" },
+        {
+          exitCode: 0,
+          stdout: JSON.stringify([{ title: "R", url: "https://x.com", snippet: "s" }]),
+        },
+      ]);
 
       const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test");
+      await provider.search("test", { maxResults: 3 });
 
-      expect(results).toHaveLength(1);
-      // biome-ignore lint/style/noNonNullAssertion: length asserted above
-      expect(results[0]!.title).toBe("Real Title");
-      // biome-ignore lint/style/noNonNullAssertion: length asserted above
-      expect(results[0]!.url).toBe("https://example.com/real");
-    });
-  });
-
-  describe("DDG redirect URL decoding", () => {
-    it("decodes /l/?uddg= redirect URLs to real URLs", async () => {
-      mockFetchWithHtml(DDG_REDIRECT_HTML);
-
-      const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test");
-
-      expect(results).toHaveLength(1);
-      // biome-ignore lint/style/noNonNullAssertion: length asserted above
-      expect(results[0]!.url).toBe("https://www.real-site.com/article");
-    });
-  });
-
-  describe("maxResults slicing", () => {
-    it("returns at most maxResults items", async () => {
-      mockFetchWithHtml(MINIMAL_HTML);
-
-      const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test", { maxResults: 3 });
-
-      expect(results).toHaveLength(3);
-    });
-
-    it("defaults to 5 results when maxResults is not specified", async () => {
-      mockFetchWithHtml(MINIMAL_HTML);
-
-      const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test");
-
-      expect(results).toHaveLength(5);
+      // Third spawn call is the search script — verify max_results=3 in the command
+      const calls = spawnSpy.mock.calls as Array<SpawnCall>;
+      // biome-ignore lint/style/noNonNullAssertion: call count asserted by mock sequence
+      const scriptCmd = calls[2]![0] as string[];
+      expect(scriptCmd[2]).toContain("max_results=3");
     });
 
     it("clamps maxResults to 20", async () => {
-      const manyResults = Array.from({ length: 25 }, (_, i) => ({
-        title: `Result ${i + 1}`,
-        href: `/l/?uddg=https%3A%2F%2Fexample.com%2Fpage${i + 1}`,
-        snippet: `Snippet ${i + 1}`,
-      }));
-
-      mockFetchWithHtml(buildDdgHtml(manyResults));
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.10.0\n" },
+        { exitCode: 0, stdout: "" },
+        { exitCode: 0, stdout: "[]" },
+      ]);
 
       const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test", { maxResults: 25 });
+      await provider.search("test", { maxResults: 50 });
 
-      expect(results).toHaveLength(20);
+      const calls = spawnSpy.mock.calls as Array<SpawnCall>;
+      // biome-ignore lint/style/noNonNullAssertion: call count asserted by mock sequence
+      const scriptCmd = calls[2]![0] as string[];
+      expect(scriptCmd[2]).toContain("max_results=20");
     });
   });
 
-  describe("y.js URL filtering", () => {
-    it("filters out URLs containing duckduckgo.com/y.js", async () => {
-      mockFetchWithHtml(YJS_FILTER_HTML);
+  describe("Python not found", () => {
+    it("throws when neither python3 nor python is on PATH", async () => {
+      spawnSpy.mockImplementation((..._args: SpawnCall) => {
+        throw new Error("spawn ENOENT");
+      });
 
       const provider = new DuckDuckGoProvider();
-      const results = await provider.search("test");
+      await expect(provider.search("test")).rejects.toThrow("Python 3.8+");
+    });
 
-      expect(results).toHaveLength(1);
-      // biome-ignore lint/style/noNonNullAssertion: length asserted above
-      expect(results[0]!.url).toBe("https://example.com/valid");
+    it("throws when Python version is below 3.8", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.6.9\n" }, // python3 too old
+        { exitCode: 1, stdout: "", stderr: "not found" }, // python fallback fails
+      ]);
+
+      const provider = new DuckDuckGoProvider();
+      await expect(provider.search("test")).rejects.toThrow("Python 3.8+");
     });
   });
 
-  describe("bot-challenge detection", () => {
-    it("throws when DDG returns 202 bot-challenge page", async () => {
-      global.fetch = mock(() =>
-        Promise.resolve({
-          ok: false,
-          status: 202,
-          text: () => Promise.resolve("<html><body>anomaly challenge</body></html>"),
-        } as unknown as Response),
-      ) as unknown as typeof fetch;
+  describe("ddgs auto-install", () => {
+    it("installs ddgs when import check fails, calls notify, then searches", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+        { exitCode: 1, stdout: "", stderr: "No module named ddgs" }, // import ddgs fails
+        { exitCode: 0, stdout: "" }, // pip install ddgs
+        { exitCode: 0, stdout: SEARCH_RESULTS }, // search
+      ]);
 
       const provider = new DuckDuckGoProvider();
-      expect(provider.search("test")).rejects.toThrow("202");
+      const notified: string[] = [];
+      const results = await provider.search("test", { notify: (msg) => notified.push(msg) });
+
+      expect(notified).toHaveLength(1);
+      expect(notified[0]).toContain("Installing");
+      expect(results).toHaveLength(2);
+    });
+
+    it("throws when pip install fails", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.12.0\n" },
+        { exitCode: 1, stdout: "" }, // import ddgs fails
+        { exitCode: 1, stdout: "", stderr: "pip error" }, // pip install fails
+      ]);
+
+      const provider = new DuckDuckGoProvider();
+      await expect(provider.search("test")).rejects.toThrow("pip install ddgs");
+    });
+  });
+
+  describe("dependency caching", () => {
+    it("only checks python and ddgs once across multiple search calls", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version (once)
+        { exitCode: 0, stdout: "" }, // import ddgs (once)
+        { exitCode: 0, stdout: SEARCH_RESULTS }, // first search
+        { exitCode: 0, stdout: SEARCH_RESULTS }, // second search
+      ]);
+
+      const provider = new DuckDuckGoProvider();
+      await provider.search("first");
+      await provider.search("second");
+
+      // 4 total spawn calls: version + import + search + search
+      expect(spawnSpy.mock.calls).toHaveLength(4);
+    });
+  });
+
+  describe("subprocess error", () => {
+    it("throws when search script exits non-zero", async () => {
+      mockSpawnSequence([
+        { exitCode: 0, stdout: "Python 3.12.0\n" },
+        { exitCode: 0, stdout: "" },
+        { exitCode: 1, stdout: "", stderr: "ConnectionError: timeout" },
+      ]);
+
+      const provider = new DuckDuckGoProvider();
+      await expect(provider.search("test")).rejects.toThrow("ConnectionError");
     });
   });
 });
