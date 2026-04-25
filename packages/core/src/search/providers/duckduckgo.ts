@@ -44,6 +44,12 @@ export class DuckDuckGoProvider implements SearchProvider {
       body: body.toString(),
     });
 
+    if (!response.ok || response.status === 202) {
+      throw new Error(
+        `DuckDuckGo search blocked (HTTP ${response.status}). DuckDuckGo is returning a bot-challenge page. Switch to provider = "brave" in config.`,
+      );
+    }
+
     const html = await response.text();
     const root = parse(html);
 

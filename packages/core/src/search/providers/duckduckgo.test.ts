@@ -201,4 +201,19 @@ describe("DuckDuckGoProvider", () => {
       expect(results[0]!.url).toBe("https://example.com/valid");
     });
   });
+
+  describe("bot-challenge detection", () => {
+    it("throws when DDG returns 202 bot-challenge page", async () => {
+      global.fetch = mock(() =>
+        Promise.resolve({
+          ok: false,
+          status: 202,
+          text: () => Promise.resolve("<html><body>anomaly challenge</body></html>"),
+        } as unknown as Response),
+      ) as unknown as typeof fetch;
+
+      const provider = new DuckDuckGoProvider();
+      expect(provider.search("test")).rejects.toThrow("202");
+    });
+  });
 });

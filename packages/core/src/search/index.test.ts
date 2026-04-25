@@ -9,9 +9,13 @@ describe("getSearchProvider", () => {
     expect(provider).toBeInstanceOf(DuckDuckGoProvider);
   });
 
-  it("returns BraveProvider for provider='brave'", () => {
-    const provider = getSearchProvider({ provider: "brave" });
+  it("returns BraveProvider for provider='brave' with API key", () => {
+    const provider = getSearchProvider({ provider: "brave", braveApiKey: "test-key" });
     expect(provider).toBeInstanceOf(BraveProvider);
+  });
+
+  it("throws when provider='brave' but no API key is set", () => {
+    expect(() => getSearchProvider({ provider: "brave" })).toThrow("brave_api_key");
   });
 
   it("falls back to DuckDuckGoProvider for unknown provider", () => {
