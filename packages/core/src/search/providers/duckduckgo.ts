@@ -1,3 +1,4 @@
+import { getLogger } from "../../logger/index.js";
 import type { SearchOptions, SearchProvider, SearchResult } from "../types.js";
 
 const DEFAULT_MAX_RESULTS = 5;
@@ -11,13 +12,8 @@ async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {
 
 async function runProcess(
   cmd: string[],
-  opts: { stdin?: string } = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(cmd, {
-    stdout: "pipe",
-    stderr: "pipe",
-    ...(opts.stdin !== undefined ? { stdin: new TextEncoder().encode(opts.stdin) } : {}),
-  });
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   const [exitCode, stdout, stderr] = await Promise.all([
     proc.exited,
     readStream(proc.stdout),
@@ -52,10 +48,15 @@ async function isDdgsInstalled(python: string): Promise<boolean> {
 }
 
 async function installDdgs(python: string): Promise<void> {
-  const { exitCode, stderr } = await runProcess([python, "-m", "pip", "install", "ddgs"]);
+  const logger = getLogger();
+  logger.info("Installing ddgs package via pip...");
+  const { exitCode, stdout, stderr } = await runProcess([python, "-m", "pip", "install", "ddgs"]);
+  if (stdout) logger.debug(`pip stdout: ${stdout.trim()}`);
+  if (stderr) logger.debug(`pip stderr: ${stderr.trim()}`);
   if (exitCode !== 0) {
     throw new Error(`Failed to install ddgs. Run: pip install ddgs\n${stderr}`);
   }
+  logger.info("ddgs installed successfully");
 }
 
 const SEARCH_SCRIPT = (query: string, maxResults: number) => `
