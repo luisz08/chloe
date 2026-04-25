@@ -111,6 +111,7 @@ export async function chatCommand({
     storage,
     modelConfig,
     contextCompression: cfg.contextCompression,
+    search: cfg.search,
   });
 
   const agent: AgentHandle = {

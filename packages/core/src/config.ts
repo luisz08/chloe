@@ -26,11 +26,17 @@ export interface ContextCompressionConfig {
   keepRecentCount: number;
 }
 
+export interface SearchConfig {
+  provider: string;
+  braveApiKey?: string;
+}
+
 export interface ChloeConfig {
   provider: ProviderConfig;
   storage: StorageConfig;
   logging: LoggingConfig;
   contextCompression: ContextCompressionConfig;
+  search: SearchConfig;
 }
 
 export const CONFIG_PATH = join(homedir(), ".chloe", "settings", "config.toml");
@@ -47,6 +53,7 @@ const DEFAULTS = {
   logMaxDays: 7,
   contextCompressionThreshold: 0.75,
   contextCompressionKeepRecent: 20,
+  searchProvider: "duckduckgo",
 } as const;
 
 export function expandHome(p: string): string {
@@ -104,6 +111,7 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
   let fileStorage: Record<string, unknown> = {};
   let fileLogging: Record<string, unknown> = {};
   let fileContextCompression: Record<string, unknown> = {};
+  let fileSearch: Record<string, unknown> = {};
 
   if (existsSync(configPath)) {
     const raw = readTomlFile(configPath);
@@ -111,6 +119,7 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
     fileStorage = section(raw, "storage");
     fileLogging = section(raw, "logging");
     fileContextCompression = section(raw, "context_compression");
+    fileSearch = section(raw, "search");
   }
 
   // Merge: env var > file value > built-in default
@@ -175,6 +184,11 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
     keepRecentCount = DEFAULTS.contextCompressionKeepRecent;
   }
 
+  // Search config: env > file > default
+  const searchProvider =
+    process.env.CHLOE_SEARCH_PROVIDER || str(fileSearch.provider) || DEFAULTS.searchProvider;
+  const braveApiKey = process.env.CHLOE_BRAVE_API_KEY || str(fileSearch.brave_api_key) || undefined;
+
   // Ensure sessions directory exists (covers fresh installs too)
   mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -194,6 +208,7 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
     storage: { dbPath },
     logging: { logDir, level: logLevel, maxSizeMb, maxDays },
     contextCompression: { threshold, keepRecentCount },
+    search: { provider: searchProvider, ...(braveApiKey !== undefined ? { braveApiKey } : {}) },
   };
 }
 

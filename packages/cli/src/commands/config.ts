@@ -129,6 +129,7 @@ async function cmdInit(): Promise<void> {
     storage: { dbPath: "" },
     logging: { logDir: "", level: "info", maxSizeMb: 10, maxDays: 7 },
     contextCompression: { threshold: 0.75, keepRecentCount: 20 },
+    search: { provider: "duckduckgo" },
   };
 
   writeConfig(cfg);

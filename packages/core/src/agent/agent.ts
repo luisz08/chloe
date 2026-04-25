@@ -63,6 +63,7 @@ export class Agent {
         loadToolSettings(process.cwd()),
         process.cwd(),
         this.bashPermissionRef,
+        config.search,
       );
     }
 
