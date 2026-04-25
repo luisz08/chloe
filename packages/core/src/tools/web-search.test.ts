@@ -2,15 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { createWebSearchTool } from "./web-search.js";
 
 function buildHtml(count: number): string {
-  const divs = Array.from(
+  const items = Array.from(
     { length: count },
     (_, i) => `
-    <div class="result">
-      <a class="result__a" href="https://example.com/${i + 1}">Result ${i + 1}</a>
-      <div class="result__snippet">Snippet ${i + 1}</div>
+    <div class="result-wrapper">
+      <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2F${i + 1}">Result ${i + 1}</a></h2>
+      <div class="result">
+        <a class="result__url" href="/l/?uddg=https%3A%2F%2Fexample.com%2F${i + 1}">example.com</a>
+        <p>Snippet ${i + 1}</p>
+      </div>
     </div>`,
   ).join("");
-  return `<html><body><div class="results">${divs}</div></body></html>`;
+  return `<html><body>${items}</body></html>`;
 }
 
 let originalFetch: typeof fetch;

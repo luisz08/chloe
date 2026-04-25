@@ -1,68 +1,90 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { DuckDuckGoProvider } from "./duckduckgo.js";
 
-const MINIMAL_HTML = `
-<html>
-<body>
-<div class="results">
-  <div class="result">
-    <a class="result__a" href="https://example.com/page1">First Result</a>
-    <div class="result__snippet">Snippet for first result</div>
-  </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/page2">Second Result</a>
-    <div class="result__snippet">Snippet for second result</div>
-  </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/page3">Third Result</a>
-    <div class="result__snippet">Snippet for third result</div>
-  </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/page4">Fourth Result</a>
-    <div class="result__snippet">Snippet for fourth result</div>
-  </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/page5">Fifth Result</a>
-    <div class="result__snippet">Snippet for fifth result</div>
-  </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/page6">Sixth Result</a>
-    <div class="result__snippet">Snippet for sixth result</div>
-  </div>
-</div>
-</body>
-</html>
-`;
+// Reflects current DDG HTML structure: titles in <h2>, URL display in result__url,
+// snippet optionally in .result__snippet or <p>.
+function buildDdgHtml(results: Array<{ title: string; href: string; snippet?: string }>): string {
+  const items = results
+    .map(
+      ({ title, href, snippet }) => `
+    <div class="result-wrapper">
+      <h2 style="font-size:large"><a href="${href}">${title}</a></h2>
+      <div class="result">
+        <a class="result__url" href="${href}">example.com</a>
+        ${snippet ? `<p>${snippet}</p>` : ""}
+      </div>
+    </div>`,
+    )
+    .join("\n");
+  return `<html><body>${items}</body></html>`;
+}
 
-const DDG_REDIRECT_HTML = `
-<html>
-<body>
-<div class="results">
-  <div class="result">
-    <a class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.real-site.com%2Farticle">Redirected Result</a>
-    <div class="result__snippet">A snippet for redirected result</div>
-  </div>
-</div>
-</body>
-</html>
-`;
+const MINIMAL_HTML = buildDdgHtml([
+  {
+    title: "First Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage1",
+    snippet: "Snippet for first result",
+  },
+  {
+    title: "Second Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage2",
+    snippet: "Snippet for second result",
+  },
+  {
+    title: "Third Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage3",
+    snippet: "Snippet for third result",
+  },
+  {
+    title: "Fourth Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage4",
+    snippet: "Snippet for fourth result",
+  },
+  {
+    title: "Fifth Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage5",
+    snippet: "Snippet for fifth result",
+  },
+  {
+    title: "Sixth Result",
+    href: "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage6",
+    snippet: "Snippet for sixth result",
+  },
+]);
 
+// DDG redirect URL that needs decoding
+const DDG_REDIRECT_HTML = buildDdgHtml([
+  {
+    title: "Redirected Result",
+    href: "/l/?uddg=https%3A%2F%2Fwww.real-site.com%2Farticle",
+    snippet: "A snippet for redirected result",
+  },
+]);
+
+// Mix of y.js ad URL and a valid result
 const YJS_FILTER_HTML = `
-<html>
-<body>
-<div class="results">
-  <div class="result">
-    <a class="result__a" href="https://duckduckgo.com/y.js?ad_domain=example.com">Ad Result</a>
-    <div class="result__snippet">Ad snippet</div>
+<html><body>
+  <div class="result-wrapper">
+    <h2><a href="https://duckduckgo.com/y.js?ad_domain=example.com">Ad Result</a></h2>
+    <div class="result"><p>Ad snippet</p></div>
   </div>
-  <div class="result">
-    <a class="result__a" href="https://example.com/valid">Valid Result</a>
-    <div class="result__snippet">Valid snippet</div>
+  <div class="result-wrapper">
+    <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2Fvalid">Valid Result</a></h2>
+    <div class="result"><p>Valid snippet</p></div>
   </div>
-</div>
-</body>
-</html>
-`;
+</body></html>`;
+
+// Verify result__url links (NOT in <h2>) are ignored as titles
+const URL_DISPLAY_ONLY_HTML = `
+<html><body>
+  <div class="result-wrapper">
+    <h2><a href="/l/?uddg=https%3A%2F%2Fexample.com%2Freal">Real Title</a></h2>
+    <div class="result">
+      <a class="result__url" href="/l/?uddg=https%3A%2F%2Fexample.com%2Freal">example.com</a>
+      <p>Snippet text</p>
+    </div>
+  </div>
+</body></html>`;
 
 let originalFetch: typeof fetch;
 
@@ -104,6 +126,19 @@ describe("DuckDuckGoProvider", () => {
         snippet: "Snippet for fifth result",
       });
     });
+
+    it("does not treat result__url anchors as titles", async () => {
+      mockFetchWithHtml(URL_DISPLAY_ONLY_HTML);
+
+      const provider = new DuckDuckGoProvider();
+      const results = await provider.search("test");
+
+      expect(results).toHaveLength(1);
+      // biome-ignore lint/style/noNonNullAssertion: length asserted above
+      expect(results[0]!.title).toBe("Real Title");
+      // biome-ignore lint/style/noNonNullAssertion: length asserted above
+      expect(results[0]!.url).toBe("https://example.com/real");
+    });
   });
 
   describe("DDG redirect URL decoding", () => {
@@ -139,16 +174,13 @@ describe("DuckDuckGoProvider", () => {
     });
 
     it("clamps maxResults to 20", async () => {
-      const manyResults = Array.from(
-        { length: 25 },
-        (_, i) => `
-        <div class="result">
-          <a class="result__a" href="https://example.com/page${i + 1}">Result ${i + 1}</a>
-          <div class="result__snippet">Snippet ${i + 1}</div>
-        </div>`,
-      ).join("");
+      const manyResults = Array.from({ length: 25 }, (_, i) => ({
+        title: `Result ${i + 1}`,
+        href: `/l/?uddg=https%3A%2F%2Fexample.com%2Fpage${i + 1}`,
+        snippet: `Snippet ${i + 1}`,
+      }));
 
-      mockFetchWithHtml(`<html><body><div class="results">${manyResults}</div></body></html>`);
+      mockFetchWithHtml(buildDdgHtml(manyResults));
 
       const provider = new DuckDuckGoProvider();
       const results = await provider.search("test", { maxResults: 25 });

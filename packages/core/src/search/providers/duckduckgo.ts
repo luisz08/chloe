@@ -49,18 +49,23 @@ export class DuckDuckGoProvider implements SearchProvider {
 
     const results: SearchResult[] = [];
 
-    for (const container of root.querySelectorAll(".result")) {
-      const anchorEl = container.querySelector(".result__a");
-      if (!anchorEl) continue;
-
+    // DDG moved titles outside .result divs into <h2> wrappers.
+    // Selecting 'h2 a[href*="uddg="]' captures only title links and excludes
+    // result__url (domain display) and snippet links (inside <p>).
+    for (const anchorEl of root.querySelectorAll('h2 a[href*="uddg="]')) {
       const title = anchorEl.text.trim();
       const rawHref = anchorEl.getAttribute("href") ?? "";
       const url = decodeDdgUrl(rawHref);
 
       if (!url || url.includes("duckduckgo.com/y.js")) continue;
 
-      const snippetEl = container.querySelector(".result__snippet");
-      const snippet = snippetEl ? snippetEl.text.trim() : "";
+      // Snippet lives in the sibling .result div (try .result__snippet, then <p>)
+      const h2 = anchorEl.parentNode;
+      const wrapper = h2?.parentNode;
+      const resultDiv = wrapper?.querySelector(".result");
+      const snippetEl =
+        resultDiv?.querySelector(".result__snippet") ?? resultDiv?.querySelector("p");
+      const snippet = snippetEl?.text.trim() ?? "";
 
       results.push({ title, url, snippet });
 
