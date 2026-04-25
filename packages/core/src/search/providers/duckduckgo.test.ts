@@ -41,10 +41,13 @@ function mockSpawnSequence(
   responses: Array<{ exitCode: number; stdout: string; stderr?: string }>,
 ) {
   let callIndex = 0;
-  spawnSpy.mockImplementation((..._args: SpawnCall) => {
-    const r = responses[callIndex++] ?? { exitCode: 0, stdout: "", stderr: "" };
-    return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
-  });
+  spawnSpy.mockImplementation(
+    // biome-ignore lint/suspicious/noExplicitAny: Bun.spawn overloads don't unify with mockImplementation
+    ((..._args: any[]) => {
+      const r = responses[callIndex++] ?? { exitCode: 0, stdout: "", stderr: "" };
+      return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
+    }) as unknown as typeof Bun.spawn,
+  );
 }
 
 const SEARCH_RESULTS = JSON.stringify([
@@ -111,9 +114,12 @@ describe("DuckDuckGoProvider", () => {
 
   describe("Python not found", () => {
     it("throws when neither python3 nor python is on PATH", async () => {
-      spawnSpy.mockImplementation((..._args: SpawnCall) => {
-        throw new Error("spawn ENOENT");
-      });
+      spawnSpy.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: Bun.spawn overloads don't unify with mockImplementation
+        ((..._args: any[]) => {
+          throw new Error("spawn ENOENT");
+        }) as unknown as typeof Bun.spawn,
+      );
 
       const provider = new DuckDuckGoProvider();
       await expect(provider.search("test")).rejects.toThrow("Python 3.8+");

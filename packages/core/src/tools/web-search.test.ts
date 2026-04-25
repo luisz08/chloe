@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { createWebSearchTool } from "./web-search.js";
 
-type SpawnCall = Parameters<typeof Bun.spawn>;
-
 function makeSpawnResult(
   exitCode: number,
   stdout: string,
@@ -49,15 +47,18 @@ afterEach(() => {
 // Simulate python3 found, ddgs installed, search returns N results
 function mockSearchSuccess(resultJson: string): void {
   let callIndex = 0;
-  spawnSpy.mockImplementation((..._args: SpawnCall) => {
-    const responses = [
-      { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
-      { exitCode: 0, stdout: "" }, // import ddgs
-      { exitCode: 0, stdout: resultJson }, // search script
-    ];
-    const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
-    return makeSpawnResult(r.exitCode, r.stdout);
-  });
+  spawnSpy.mockImplementation(
+    // biome-ignore lint/suspicious/noExplicitAny: Bun.spawn overloads don't unify with mockImplementation
+    ((..._args: any[]) => {
+      const responses = [
+        { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+        { exitCode: 0, stdout: "" }, // import ddgs
+        { exitCode: 0, stdout: resultJson }, // search script
+      ];
+      const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
+      return makeSpawnResult(r.exitCode, r.stdout);
+    }) as unknown as typeof Bun.spawn,
+  );
 }
 
 describe("createWebSearchTool", () => {
@@ -130,16 +131,19 @@ describe("createWebSearchTool", () => {
   describe("ddgs auto-install notice", () => {
     it("prefixes output with Notice: when ddgs was auto-installed", async () => {
       let callIndex = 0;
-      spawnSpy.mockImplementation((..._args: SpawnCall) => {
-        const responses = [
-          { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
-          { exitCode: 1, stdout: "", stderr: "No module named ddgs" }, // import ddgs fails
-          { exitCode: 0, stdout: "" }, // pip install ddgs
-          { exitCode: 0, stdout: buildResults(2) }, // search
-        ];
-        const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
-        return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
-      });
+      spawnSpy.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: Bun.spawn overloads don't unify with mockImplementation
+        ((..._args: any[]) => {
+          const responses = [
+            { exitCode: 0, stdout: "Python 3.12.0\n" }, // python3 --version
+            { exitCode: 1, stdout: "", stderr: "No module named ddgs" }, // import ddgs fails
+            { exitCode: 0, stdout: "" }, // pip install ddgs
+            { exitCode: 0, stdout: buildResults(2) }, // search
+          ];
+          const r = responses[callIndex++] ?? { exitCode: 0, stdout: "" };
+          return makeSpawnResult(r.exitCode, r.stdout, r.stderr ?? "");
+        }) as unknown as typeof Bun.spawn,
+      );
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "test" });
@@ -155,9 +159,12 @@ describe("createWebSearchTool", () => {
 
   describe("Python not available", () => {
     it("returns Error string when Python is not on PATH", async () => {
-      spawnSpy.mockImplementation((..._args: SpawnCall) => {
-        throw new Error("spawn ENOENT");
-      });
+      spawnSpy.mockImplementation(
+        // biome-ignore lint/suspicious/noExplicitAny: overload union incompatible with mockImplementation signature
+        ((..._args: any[]) => {
+          throw new Error("spawn ENOENT");
+        }) as unknown as typeof Bun.spawn,
+      );
 
       const tool = createWebSearchTool(searchConfig);
       const output = await tool.execute({ query: "test" });
