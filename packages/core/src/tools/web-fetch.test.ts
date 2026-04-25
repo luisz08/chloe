@@ -168,4 +168,23 @@ describe("createWebFetchTool", () => {
       expect(output).toContain("application/xml");
     });
   });
+
+  describe("non-200 HTTP status", () => {
+    it("returns error message with HTTP status code", async () => {
+      global.fetch = mock(() =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          headers: { get: () => "text/html" },
+          text: () => Promise.resolve("<html><body>Not Found</body></html>"),
+        } as unknown as Response),
+      ) as unknown as typeof fetch;
+
+      const tool = createWebFetchTool();
+      const output = await tool.execute({ url: "https://example.com/missing", process: false });
+
+      expect(output).toContain("Error");
+      expect(output).toContain("404");
+    });
+  });
 });

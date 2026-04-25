@@ -66,6 +66,10 @@ export function createWebFetchTool(): Tool {
         return `Error fetching URL: ${msg}`;
       }
 
+      if (!response.ok) {
+        return `Error: HTTP ${response.status} fetching URL.`;
+      }
+
       const contentType = response.headers.get("content-type") ?? "";
       if (!contentType.includes("text/html")) {
         return `Error: Expected HTML content but got '${contentType}'. Only HTML pages are supported.`;
