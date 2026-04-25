@@ -317,7 +317,9 @@ describe("search config", () => {
   });
 
   it("reads provider from [search] section", () => {
-    writeToml(`[provider]\napi_key = "key"\n[search]\nprovider = "brave"\nbrave_api_key = "bk-123"\n`);
+    writeToml(
+      `[provider]\napi_key = "key"\n[search]\nprovider = "brave"\nbrave_api_key = "bk-123"\n`,
+    );
     const cfg = loadConfigFrom(CONFIG_PATH);
     expect(cfg.search.provider).toBe("brave");
     expect(cfg.search.braveApiKey).toBe("bk-123");

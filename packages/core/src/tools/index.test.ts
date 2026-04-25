@@ -6,15 +6,28 @@ describe("createDefaultTools", () => {
   const settings = DEFAULT_TOOL_SETTINGS(cwd);
   const tools = createDefaultTools(settings, cwd);
 
-  it("returns exactly 3 tools", () => {
-    expect(tools).toHaveLength(3);
+  it("returns exactly 4 tools (bash, read_file, write_file, web_fetch)", () => {
+    expect(tools).toHaveLength(4);
   });
 
-  it("includes bash, read_file, write_file", () => {
+  it("includes bash, read_file, write_file, web_fetch", () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain("bash");
     expect(names).toContain("read_file");
     expect(names).toContain("write_file");
+    expect(names).toContain("web_fetch");
+  });
+
+  it("does not include web_search when no searchConfig provided", () => {
+    const names = tools.map((t) => t.name);
+    expect(names).not.toContain("web_search");
+  });
+
+  it("includes web_search when searchConfig is provided", () => {
+    const withSearch = createDefaultTools(settings, cwd, undefined, { provider: "duckduckgo" });
+    const names = withSearch.map((t) => t.name);
+    expect(names).toContain("web_search");
+    expect(withSearch).toHaveLength(5);
   });
 
   it("does NOT include echo", () => {

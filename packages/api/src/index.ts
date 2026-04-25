@@ -49,6 +49,7 @@ const agent = createAgent({
   storage,
   modelConfig,
   contextCompression: cfg.contextCompression,
+  search: cfg.search,
 });
 
 const port = resolvePort();

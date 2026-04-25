@@ -1,5 +1,5 @@
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import type { ContextCompressionConfig } from "../config.js";
+import type { ContextCompressionConfig, SearchConfig } from "../config.js";
 import type { StorageAdapter } from "../storage/adapter.js";
 import type { Tool } from "../tools/types.js";
 
@@ -42,6 +42,8 @@ export interface AgentConfig {
   modelConfig?: ResolvedModelConfig;
   /** Optional: context compression configuration */
   contextCompression?: ContextCompressionConfig;
+  /** Optional: search configuration for web_search tool */
+  search?: SearchConfig;
 }
 
 export interface CompressionInfo {
