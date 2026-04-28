@@ -101,9 +101,16 @@ export function App({
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [suppressPalette, setSuppressPalette] = useState(false);
 
+  // Keep a ref in sync with messages so callbacks don't need it as a dep
+  const messagesRef = useRef<ChatMessage[]>(initialMessages ?? []);
+  useEffect(() => {
+    messagesRef.current = messages;
+  });
+
   // Streaming buffer — accumulate tokens here, flush to state at 16ms intervals
   const streamingIdRef = useRef<string | null>(null);
   const bufferRef = useRef<string>("");
+  const lastFlushedRef = useRef<string>("");
 
   // Tool confirmation promise resolver
   const confirmResolveRef = useRef<((result: ConfirmResult) => void) | null>(null);
@@ -113,7 +120,8 @@ export function App({
     const id = setInterval(() => {
       const buf = bufferRef.current;
       const msgId = streamingIdRef.current;
-      if (msgId === null || buf === "") return;
+      if (msgId === null || buf === lastFlushedRef.current) return;
+      lastFlushedRef.current = buf;
       setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: buf } : m)));
     }, 16);
     return () => clearInterval(id);
@@ -130,12 +138,7 @@ export function App({
   }, [globalSkillsDir, projectSkillsDir, recentsFilePath]);
 
   const handleUsage = useCallback((usage: TurnUsage) => {
-    setTokenUsage((prev) => ({
-      inputTokens: prev.inputTokens + usage.inputTokens,
-      outputTokens: prev.outputTokens + usage.outputTokens,
-      cacheReadTokens: prev.cacheReadTokens + usage.cacheReadTokens,
-      cacheCreationTokens: prev.cacheCreationTokens + usage.cacheCreationTokens,
-    }));
+    setTokenUsage(usage);
   }, []);
 
   const confirmBashCommand = useCallback(
@@ -195,7 +198,7 @@ export function App({
         };
         setMessages((prev) => [...prev, userMsg]);
 
-        if (messages.length === 0) {
+        if (messagesRef.current.length === 0) {
           setMessages((prev) => [
             ...prev,
             {
@@ -346,7 +349,12 @@ export function App({
                 toolName: name,
                 toolInput: input,
                 content: "",
-                state: autoConfirm || name === BASH_TOOL_NAME ? "confirmed" : "pending",
+                state:
+                  autoConfirm || name === BASH_TOOL_NAME
+                    ? "confirmed"
+                    : sessionAllowedTools.has(name)
+                      ? "session-allowed"
+                      : "pending",
               };
               setMessages((prev) => [...prev, toolMsg]);
             },
@@ -427,7 +435,6 @@ export function App({
     },
     [
       status,
-      messages,
       sessionId,
       agent,
       autoConfirm,
@@ -441,38 +448,33 @@ export function App({
     ],
   );
 
-  const handleToolConfirm = useCallback(
-    (result: ConfirmResult) => {
-      const resolve = confirmResolveRef.current;
-      if (resolve === null) return;
-      confirmResolveRef.current = null;
+  const handleToolConfirm = useCallback((result: ConfirmResult) => {
+    const resolve = confirmResolveRef.current;
+    if (resolve === null) return;
+    confirmResolveRef.current = null;
 
-      if (result === "allow-session") {
-        const pending = messages.find((m) => m.role === "tool" && m.state === "pending");
-        if (pending?.toolName) {
-          setSessionAllowedTools((s) => new Set([...s, pending.toolName as string]));
-        }
+    if (result === "allow-session") {
+      const pending = messagesRef.current.find((m) => m.role === "tool" && m.state === "pending");
+      if (pending?.toolName) {
+        setSessionAllowedTools((s) => new Set([...s, pending.toolName as string]));
       }
+    }
 
-      setMessages((prev) => {
-        const idx = [...prev]
-          .reverse()
-          .findIndex((m) => m.role === "tool" && m.state === "pending");
-        if (idx === -1) return prev;
-        const realIdx = prev.length - 1 - idx;
-        const newState: import("./types.js").MessageState =
-          result === "allow-once"
-            ? "confirmed"
-            : result === "allow-session"
-              ? "session-allowed"
-              : "denied";
-        return prev.map((m, i) => (i === realIdx ? { ...m, state: newState } : m));
-      });
+    setMessages((prev) => {
+      const idx = [...prev].reverse().findIndex((m) => m.role === "tool" && m.state === "pending");
+      if (idx === -1) return prev;
+      const realIdx = prev.length - 1 - idx;
+      const newState: import("./types.js").MessageState =
+        result === "allow-once"
+          ? "confirmed"
+          : result === "allow-session"
+            ? "session-allowed"
+            : "denied";
+      return prev.map((m, i) => (i === realIdx ? { ...m, state: newState } : m));
+    });
 
-      resolve(result);
-    },
-    [messages],
-  );
+    resolve(result);
+  }, []);
 
   // Double Ctrl+C exit
   const lastCtrlCRef = useRef<number>(0);

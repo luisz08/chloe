@@ -27,11 +27,7 @@ export function StatusBar({
   contextLimit,
   status,
 }: StatusBarProps) {
-  const totalUsed =
-    tokenUsage.inputTokens +
-    tokenUsage.outputTokens +
-    tokenUsage.cacheReadTokens +
-    tokenUsage.cacheCreationTokens;
+  const totalUsed = tokenUsage.inputTokens;
 
   const pct = contextLimit > 0 ? ((totalUsed / contextLimit) * 100).toFixed(1) : "0.0";
   const limitK = `${Math.round(contextLimit / 1000)}k`;

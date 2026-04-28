@@ -54,8 +54,11 @@ export function createWebFetchTool(): Tool {
       const { url, process: shouldProcess = true, prompt } = input as WebFetchInput;
 
       let response: Response;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
         response = await fetch(url, {
+          signal: controller.signal,
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -63,7 +66,10 @@ export function createWebFetchTool(): Tool {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return `Error fetching URL: ${msg}`;
+        const reason = controller.signal.aborted ? "timed out after 30s" : msg;
+        return `Error fetching URL: ${reason}`;
+      } finally {
+        clearTimeout(timeoutId);
       }
 
       if (!response.ok) {

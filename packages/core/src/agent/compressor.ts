@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { ContentBlockType } from "../providers/anthropic.js";
 import { getContextLimit } from "./models.js";
@@ -63,11 +63,8 @@ async function resolveTokenCount(
       ...(system !== undefined ? { system } : {}),
     });
     return result.input_tokens;
-  } catch (err) {
-    if (err instanceof Anthropic.NotFoundError) {
-      return countTokensLocal(messages, system);
-    }
-    throw err;
+  } catch {
+    return countTokensLocal(messages, system);
   }
 }
 

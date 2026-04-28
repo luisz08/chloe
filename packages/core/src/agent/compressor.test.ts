@@ -163,22 +163,22 @@ describe("compressIfNeeded", () => {
     expect(result?.summaryText).toBe("Fallback summary");
   });
 
-  test("re-throws non-404 errors from countTokens", async () => {
+  test("falls back to local estimation when countTokens throws any error", async () => {
     const messages = makeMessages(30);
     const apiError = new Anthropic.InternalServerError(500, {}, "Server error", {});
-    const client = makeMockClient("unused", async () => {
+    const client = makeMockClient("Fallback summary", async () => {
       throw apiError;
     });
 
-    await expect(
-      compressIfNeeded(messages as MessageParam[], {
-        client: client as never,
-        model: "claude-sonnet-4-6",
-        fastModel: "claude-haiku-4-5",
-        threshold: 0,
-        keepRecentCount: 20,
-      }),
-    ).rejects.toThrow(apiError);
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5",
+      threshold: 0,
+      keepRecentCount: 20,
+    });
+    expect(result).not.toBeNull();
+    expect(result?.summaryText).toBe("Fallback summary");
   });
 
   test("threshold:0 always compresses (forceCompress pattern)", async () => {
