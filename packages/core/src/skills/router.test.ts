@@ -10,6 +10,11 @@ function makeTmpDir(): string {
   return dir;
 }
 
+function writeSkill(dir: string, name: string, content: string) {
+  mkdirSync(join(dir, name), { recursive: true });
+  writeFileSync(join(dir, name, "SKILL.md"), content);
+}
+
 describe("routeCommand — passthrough", () => {
   it("returns passthrough for input not starting with /", async () => {
     const result = await routeCommand("hello world", { globalSkillsDir: "", projectSkillsDir: "" });
@@ -51,7 +56,7 @@ describe("routeCommand — internal commands", () => {
   });
 
   it("/help lists a global skill", async () => {
-    writeFileSync(join(globalDir, "greet.md"), "Hello");
+    writeSkill(globalDir, "greet", "Hello");
     const result = await routeCommand("/help", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -64,7 +69,7 @@ describe("routeCommand — internal commands", () => {
   });
 
   it("/help lists a project skill", async () => {
-    writeFileSync(join(projectDir, "deploy.md"), "Deploy");
+    writeSkill(projectDir, "deploy", "Deploy");
     const result = await routeCommand("/help", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -77,8 +82,8 @@ describe("routeCommand — internal commands", () => {
   });
 
   it("/help marks overridden global skills", async () => {
-    writeFileSync(join(globalDir, "greet.md"), "Global");
-    writeFileSync(join(projectDir, "greet.md"), "Project");
+    writeSkill(globalDir, "greet", "Global");
+    writeSkill(projectDir, "greet", "Project");
     const result = await routeCommand("/help", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -105,7 +110,7 @@ describe("routeCommand — skill expansion", () => {
   });
 
   it("expands skill with $ARGUMENTS substituted", async () => {
-    writeFileSync(join(globalDir, "greet.md"), "Hello $ARGUMENTS");
+    writeSkill(globalDir, "greet", "Hello $ARGUMENTS");
     const result = await routeCommand("/greet world", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -117,7 +122,7 @@ describe("routeCommand — skill expansion", () => {
   });
 
   it("sends skill content verbatim when no $ARGUMENTS and no args given", async () => {
-    writeFileSync(join(globalDir, "deploy.md"), "Deploy now");
+    writeSkill(globalDir, "deploy", "Deploy now");
     const result = await routeCommand("/deploy", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -129,8 +134,8 @@ describe("routeCommand — skill expansion", () => {
   });
 
   it("project skill takes precedence over global skill", async () => {
-    writeFileSync(join(globalDir, "greet.md"), "Global greet $ARGUMENTS");
-    writeFileSync(join(projectDir, "greet.md"), "Project greet $ARGUMENTS");
+    writeSkill(globalDir, "greet", "Global greet $ARGUMENTS");
+    writeSkill(projectDir, "greet", "Project greet $ARGUMENTS");
     const result = await routeCommand("/greet world", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -142,7 +147,7 @@ describe("routeCommand — skill expansion", () => {
   });
 
   it("returns error for empty skill file", async () => {
-    writeFileSync(join(globalDir, "empty.md"), "");
+    writeSkill(globalDir, "empty", "");
     const result = await routeCommand("/empty", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,
@@ -153,8 +158,8 @@ describe("routeCommand — skill expansion", () => {
     }
   });
 
-  it("lookup is case-insensitive — /Greet resolves to greet.md", async () => {
-    writeFileSync(join(globalDir, "greet.md"), "Hello $ARGUMENTS");
+  it("lookup is case-insensitive — /Greet resolves to greet skill", async () => {
+    writeSkill(globalDir, "greet", "Hello $ARGUMENTS");
     const result = await routeCommand("/Greet world", {
       globalSkillsDir: globalDir,
       projectSkillsDir: projectDir,

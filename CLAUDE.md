@@ -39,9 +39,9 @@ Config has four model slots: `defaultModel`, `reasoningModel`, `fastModel`, `vis
 
 ### Skills (`packages/core/src/skills/`)
 
-Skills are Markdown files that inject a system prompt when the user types `/skill-name`. Two discovery locations per session (project overrides global):
-- Global: `~/.chloe/skills/<name>.md`
-- Project: `./.chloe/skills/<name>.md`
+Skills are Markdown files that inject a system prompt when the user types `/skill-name`. Each skill lives in its own subdirectory containing a `SKILL.md` file. Two discovery locations per session (project overrides global):
+- Global: `~/.chloe/skills/<name>/SKILL.md`
+- Project: `./.chloe/skills/<name>/SKILL.md`
 
 Priority order (highest first): project > global > plugin. `mergePluginSkills()` in `loader.ts` applies this merge. `$ARGUMENTS` in skill content is replaced with text typed after the slash command.
 
@@ -57,7 +57,7 @@ Plugins live in `~/.chloe/plugins/`:
 **Marketplace manifest** (in marketplace repo): `.chloe-plugin/marketplace.json`  
 **Plugin manifest** (in plugin dir): `.chloe-plugin/plugin.json`
 
-Plugin skills are discovered from `skills/<name>/SKILL.md` and `commands/<name>.md` inside the cache dir.
+Plugin skills are discovered from `skills/<name>/SKILL.md` and `commands/<name>/SKILL.md` inside the cache dir.
 
 **Hook system** (`hooks.ts`): `HookRegistry.fire()` is always fire-and-forget (returns `void`, never throws). Hooks run sequentially per event with a 10-second kill timeout. Hook commands receive a minimal env (`PATH`, `HOME`, `CHLOE_PLUGIN_ROOT`, `CHLOE_HOOK_EVENT`, `CHLOE_SESSION_ID`, `CHLOE_TOOL_NAME`) — full `process.env` is intentionally not forwarded to avoid leaking API keys. Events: `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`.
 

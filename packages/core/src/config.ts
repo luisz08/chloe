@@ -189,8 +189,9 @@ export function loadConfigFrom(configPath: string): ChloeConfig {
     process.env.CHLOE_SEARCH_PROVIDER || str(fileSearch.provider) || DEFAULTS.searchProvider;
   const braveApiKey = process.env.CHLOE_BRAVE_API_KEY || str(fileSearch.brave_api_key) || undefined;
 
-  // Ensure sessions directory exists (covers fresh installs too)
+  // Ensure sessions and skills directories exist (covers fresh installs too)
   mkdirSync(dirname(dbPath), { recursive: true });
+  mkdirSync(join(homedir(), ".chloe", "skills"), { recursive: true });
 
   // Migrate old flat db path if needed
   migrateDb(dbPath);

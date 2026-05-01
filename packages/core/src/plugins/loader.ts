@@ -15,7 +15,7 @@ import {
   SkillSource,
 } from "./types.js";
 
-const VALID_COMMAND_NAME = /^[a-z0-9_-]+\.md$/;
+const VALID_COMMAND_NAME = /^[a-z0-9_-]+$/;
 const VALID_HOOK_EVENTS = new Set<string>(Object.values(HookEvent));
 
 export async function loadInstalledPlugins(): Promise<LoadedPlugin[]> {
@@ -79,16 +79,18 @@ export function discoverSkills(
     }
   }
 
-  // Check commands/ directory: each <name>.md file matching pattern
+  // Check commands/ directory: each <name>/SKILL.md subdirectory
   const commandsDir = join(cacheDir, "commands");
   if (existsSync(commandsDir)) {
-    for (const file of readdirSync(commandsDir)) {
-      if (!VALID_COMMAND_NAME.test(file)) continue;
-      const name = file.slice(0, -3);
+    for (const entry of readdirSync(commandsDir)) {
+      if (!VALID_COMMAND_NAME.test(entry)) continue;
+      const entryPath = join(commandsDir, entry);
+      const skillFile = join(entryPath, "SKILL.md");
       try {
-        const content = readFileSync(join(commandsDir, file), "utf8");
+        if (!statSync(entryPath).isDirectory() || !existsSync(skillFile)) continue;
+        const content = readFileSync(skillFile, "utf8");
         skills.push({
-          name,
+          name: entry,
           content,
           source: SkillSource.Plugin,
           description: extractDescription(content),
@@ -97,7 +99,7 @@ export function discoverSkills(
       } catch (err) {
         log.warn("failed to load command skill", {
           pluginId,
-          file,
+          entry,
           error: err instanceof Error ? err.message : String(err),
         });
       }

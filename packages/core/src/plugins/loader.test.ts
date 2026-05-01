@@ -34,9 +34,9 @@ describe("discoverSkills", () => {
     expect(skills[0]?.pluginId).toBe("test@mkt");
   });
 
-  it("discovers skills from commands/<name>.md", () => {
-    mkdirSync(join(dir, "commands"), { recursive: true });
-    writeFileSync(join(dir, "commands", "fmt.md"), "Format code");
+  it("discovers skills from commands/<name>/SKILL.md", () => {
+    mkdirSync(join(dir, "commands", "fmt"), { recursive: true });
+    writeFileSync(join(dir, "commands", "fmt", "SKILL.md"), "Format code");
     const skills = discoverSkills(dir, "test@mkt");
     expect(skills).toHaveLength(1);
     expect(skills[0]?.name).toBe("fmt");
@@ -45,8 +45,8 @@ describe("discoverSkills", () => {
   it("discovers both skill forms simultaneously", () => {
     mkdirSync(join(dir, "skills", "greet"), { recursive: true });
     writeFileSync(join(dir, "skills", "greet", "SKILL.md"), "Greet");
-    mkdirSync(join(dir, "commands"), { recursive: true });
-    writeFileSync(join(dir, "commands", "fmt.md"), "Format");
+    mkdirSync(join(dir, "commands", "fmt"), { recursive: true });
+    writeFileSync(join(dir, "commands", "fmt", "SKILL.md"), "Format");
     const skills = discoverSkills(dir, "test@mkt");
     expect(skills).toHaveLength(2);
   });

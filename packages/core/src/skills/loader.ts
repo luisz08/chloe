@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { PluginSkill } from "../plugins/types.js";
 import { type Skill, SkillSource } from "./types.js";
 
-const VALID_SKILL_NAME = /^[a-z0-9_-]+\.md$/;
+const VALID_SKILL_NAME = /^[a-z0-9_-]+$/;
 
 export function extractDescription(content: string): string {
   const lines = content.split("\n");
@@ -30,11 +30,13 @@ export function extractDescription(content: string): string {
 function loadSkillsFromDir(dir: string, source: SkillSource): Map<string, Skill> {
   const skills = new Map<string, Skill>();
   if (!existsSync(dir)) return skills;
-  for (const file of readdirSync(dir)) {
-    if (!VALID_SKILL_NAME.test(file)) continue;
-    const name = file.slice(0, -3);
-    const content = readFileSync(join(dir, file), "utf8");
-    skills.set(name, { name, content, source, description: extractDescription(content) });
+  for (const entry of readdirSync(dir)) {
+    if (!VALID_SKILL_NAME.test(entry)) continue;
+    const entryPath = join(dir, entry);
+    const skillFile = join(entryPath, "SKILL.md");
+    if (!statSync(entryPath).isDirectory() || !existsSync(skillFile)) continue;
+    const content = readFileSync(skillFile, "utf8");
+    skills.set(entry, { name: entry, content, source, description: extractDescription(content) });
   }
   return skills;
 }
