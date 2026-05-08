@@ -71,12 +71,9 @@ describe("compressIfNeeded", () => {
     expect(result?.compressedCount).toBe(10); // 30 - 20
     expect(result?.keptCount).toBe(20);
     expect(result?.summaryText).toBe("## Summary\nKey facts here");
-    // messages = [summary-user, summary-assistant, ...recent(20)]
-    expect(result?.messages).toHaveLength(22);
-    expect(result?.messages[0]?.role).toBe("user");
-    expect(result?.messages[0]?.content).toContain("<context_summary>");
-    expect(result?.messages[1]?.role).toBe("assistant");
-    expect(result?.messages[1]?.content).toContain("Understood");
+    // Phase 5: messages = [...recent(20)] only — summary goes into system prompt, not messages
+    expect(result?.messages).toHaveLength(20);
+    expect(result?.messages[0]?.content).not.toContain("<context_summary>");
   });
 
   test("T011: compressedCount + keptCount sum equals total input messages", async () => {
@@ -195,5 +192,47 @@ describe("compressIfNeeded", () => {
 
     expect(result).not.toBeNull();
     expect(result?.compressedCount).toBe(10);
+  });
+
+  test("result includes workingSetPaths array", async () => {
+    const messages = makeMessages(30);
+    const client = makeMockClient("Summary");
+
+    const result = await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5",
+      threshold: 0,
+      keepRecentCount: 20,
+    });
+
+    expect(result).not.toBeNull();
+    expect(Array.isArray(result?.workingSetPaths)).toBe(true);
+  });
+
+  test("existingSummary is chained into new summary request", async () => {
+    let capturedInput: { messages: Array<{ content: Array<{ text: string }> }> } | undefined;
+    const client = {
+      messages: {
+        countTokens: async () => ({ input_tokens: 0 }),
+        create: async (params: unknown) => {
+          capturedInput = params as typeof capturedInput;
+          return { content: [{ type: "text", text: "New summary" }] };
+        },
+      },
+    };
+
+    const messages = makeMessages(30);
+    await compressIfNeeded(messages as MessageParam[], {
+      client: client as never,
+      model: "claude-sonnet-4-6",
+      fastModel: "claude-haiku-4-5",
+      threshold: 0,
+      keepRecentCount: 20,
+      existingSummary: "Old session: user was debugging login flow.",
+    });
+
+    const text = capturedInput?.messages[0]?.content[0]?.text ?? "";
+    expect(text).toContain("Old session: user was debugging login flow.");
   });
 });

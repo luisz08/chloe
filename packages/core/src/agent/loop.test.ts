@@ -126,6 +126,17 @@ function makeEchoTool(): Tool {
   };
 }
 
+function makeLargeOutputTool(outputSize: number): Tool {
+  return {
+    name: "bash",
+    description: "Runs bash",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    async execute(): Promise<string> {
+      return "x".repeat(outputSize);
+    },
+  };
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("runLoop", () => {
@@ -296,6 +307,95 @@ describe("runLoop", () => {
 
     expect(toolCallCount).toBe(2);
     expect(result.finalText).toBe("All done.");
+  });
+});
+
+// ─── Tool output compaction tests ────────────────────────────────────────────
+
+describe("tool output compaction", () => {
+  it("large bash output is trimmed in context but full output sent to onToolResult callback", async () => {
+    const bigOutput = "x".repeat(15_000); // above noisy soft limit (2_000)
+    const toolId = "tool_big";
+    const toolFinalMsg = makeFinalToolMessage(toolId, "bash", {});
+    const afterMsg = makeFinalTextMessage("Done.");
+
+    const client = makeMockClient([
+      { events: makeToolUseEvents(toolId, "bash", {}), finalMsg: toolFinalMsg },
+      { events: makeTextEvents("Done."), finalMsg: afterMsg },
+    ]);
+
+    const registry = new ToolRegistry();
+    registry.register(makeLargeOutputTool(15_000));
+
+    let callbackOutput = "";
+    const result = await runLoop({
+      messages: [{ role: "user", content: "Run bash" }],
+      client,
+      model: "claude-test",
+      tools: registry,
+      callbacks: {
+        onToolResult: (_, output) => {
+          callbackOutput = output;
+        },
+        confirmTool: async () => true,
+      },
+    });
+
+    // The callback sees the original full output
+    expect(callbackOutput).toBe(bigOutput);
+
+    // The tool_result pushed into messages is trimmed
+    const userTurns = result.messages.filter((m) => m.role === "user");
+    const toolResultTurn = userTurns.find((m) => {
+      if (!Array.isArray(m.content)) return false;
+      return m.content.some(
+        (c) => typeof c === "object" && c !== null && "type" in c && c.type === "tool_result",
+      );
+    });
+    expect(toolResultTurn).toBeDefined();
+    const toolResultBlock = (
+      toolResultTurn?.content as Array<{ type: string; content: string }>
+    ).find((c) => c.type === "tool_result");
+    expect(toolResultBlock?.content).toContain("[bash output trimmed");
+    expect(toolResultBlock?.content.length).toBeLessThan(bigOutput.length);
+  });
+
+  it("small tool output is passed through unchanged", async () => {
+    const smallOutput = "small result";
+    const toolId = "tool_small";
+    const toolFinalMsg = makeFinalToolMessage(toolId, "echo", { message: "small result" });
+    const afterMsg = makeFinalTextMessage("Done.");
+
+    const client = makeMockClient([
+      {
+        events: makeToolUseEvents(toolId, "echo", { message: "small result" }),
+        finalMsg: toolFinalMsg,
+      },
+      { events: makeTextEvents("Done."), finalMsg: afterMsg },
+    ]);
+
+    const registry = new ToolRegistry();
+    registry.register(makeEchoTool());
+
+    const result = await runLoop({
+      messages: [{ role: "user", content: "Echo small result" }],
+      client,
+      model: "claude-test",
+      tools: registry,
+      callbacks: { confirmTool: async () => true },
+    });
+
+    const userTurns = result.messages.filter((m) => m.role === "user");
+    const toolResultTurn = userTurns.find((m) => {
+      if (!Array.isArray(m.content)) return false;
+      return m.content.some(
+        (c) => typeof c === "object" && c !== null && "type" in c && c.type === "tool_result",
+      );
+    });
+    const toolResultBlock = (
+      toolResultTurn?.content as Array<{ type: string; content: string }>
+    ).find((c) => c.type === "tool_result");
+    expect(toolResultBlock?.content).toBe(smallOutput);
   });
 });
 

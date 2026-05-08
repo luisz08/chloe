@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import { compactToolOutput } from "../context/toolOutputCompaction.js";
 import { getLogger } from "../logger/index.js";
 import type { HookRegistry } from "../plugins/hooks.js";
 import { HookEvent } from "../plugins/types.js";
@@ -149,7 +150,7 @@ export async function runLoop(options: RunLoopOptions): Promise<RunResult> {
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,
-          content: output,
+          content: compactToolOutput(toolName, output),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

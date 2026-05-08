@@ -4,10 +4,23 @@ import type { StorageAdapter } from "../storage/adapter.js";
 
 // ─── Mock @anthropic-ai/sdk ──────────────────────────────────────────────────
 // Capture constructor options so we can assert baseURL is passed through.
+// All mocks must export the error classes that summarizer.ts imports as named exports.
 
 const anthropicCalls: Array<{ apiKey: string; baseURL?: string }> = [];
 
+function makeErrorExports() {
+  return {
+    RateLimitError: class RateLimitError extends Error {},
+    InternalServerError: class InternalServerError extends Error {},
+    APIConnectionError: class APIConnectionError extends Error {},
+    BadRequestError: class BadRequestError extends Error {},
+    NotFoundError: class NotFoundError extends Error {},
+    AuthenticationError: class AuthenticationError extends Error {},
+  };
+}
+
 mock.module("@anthropic-ai/sdk", () => ({
+  ...makeErrorExports(),
   default: class MockAnthropic {
     messages = {
       stream: () => {
@@ -190,6 +203,7 @@ interface CapturedStreamParams {
 
 function makeCapturingMockModule(captured: CapturedStreamParams[]) {
   return {
+    ...makeErrorExports(),
     default: class MockAnthropic {
       messages = {
         stream: (params: unknown) => {
@@ -395,6 +409,7 @@ describe("Agent.forceCompress()", () => {
     let countTokensCalled = false;
     let createCalled = false;
     mock.module("@anthropic-ai/sdk", () => ({
+      ...makeErrorExports(),
       default: class MockAnthropic {
         messages = {
           stream: () => {
@@ -432,6 +447,7 @@ describe("Agent.forceCompress()", () => {
   it("T022: forceCompress compresses history, persists summary, and fires callback", async () => {
     const summaryText = "## Key Facts\nImportant context.";
     mock.module("@anthropic-ai/sdk", () => ({
+      ...makeErrorExports(),
       default: class MockAnthropic {
         messages = {
           stream: () => {
@@ -479,8 +495,120 @@ describe("Agent.forceCompress()", () => {
     expect(compressedCount).toBe(5); // 25 - 20
     expect(keptCount).toBe(20);
 
-    // Summary should be persisted
+    // Phase 5: persisted value is the full buildSummarySystem() block, not raw text
     const persisted = await storage.getSessionSummary("compress-session");
-    expect(persisted).toBe(summaryText);
+    expect(persisted).toContain(summaryText);
+    expect(persisted).toContain("Context Summary");
+  });
+});
+
+// ─── Phase 5: System prompt injection tests ───────────────────────────────────
+
+describe("Agent — system prompt summary injection", () => {
+  it("existing session summary is injected into system prompt (not as messages)", async () => {
+    const captured: CapturedStreamParams[] = [];
+    mock.module("@anthropic-ai/sdk", () => makeCapturingMockModule(captured));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+
+    const storage = new SQLiteStorageAdapter(":memory:");
+    await storage.createSession("summary-session", "Summary Test");
+    await storage.setSessionSummary(
+      "summary-session",
+      "Prior context: user was debugging the login flow.",
+    );
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      tools: [],
+      storage,
+    });
+
+    await agent.run("summary-session", "Hello");
+
+    expect(captured.length).toBeGreaterThan(0);
+    expect(captured[0]?.system).toContain("Prior context: user was debugging the login flow.");
+  });
+
+  it("messages array does not start with fake summary user/assistant pair", async () => {
+    interface StreamCapture {
+      system?: string;
+      firstMessageContent: string;
+    }
+    let streamCapture: StreamCapture | undefined;
+
+    mock.module("@anthropic-ai/sdk", () => ({
+      ...makeErrorExports(),
+      default: class MockAnthropic {
+        messages = {
+          stream: (params: unknown) => {
+            const p = params as {
+              system?: string;
+              messages: Array<{ role: string; content: unknown }>;
+            };
+            const first = p.messages[0];
+            const content =
+              typeof first?.content === "string"
+                ? first.content
+                : JSON.stringify(first?.content ?? "");
+            streamCapture = {
+              ...(p.system !== undefined ? { system: p.system } : {}),
+              firstMessageContent: content,
+            };
+            return {
+              [Symbol.asyncIterator]: async function* () {
+                yield { type: "message_start", message: {} };
+                yield {
+                  type: "content_block_start",
+                  index: 0,
+                  content_block: { type: "text", text: "" },
+                };
+                yield {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: { type: "text_delta", text: "OK" },
+                };
+                yield { type: "content_block_stop", index: 0 };
+                yield {
+                  type: "message_delta",
+                  delta: { stop_reason: "end_turn", stop_sequence: null },
+                  usage: { output_tokens: 1 },
+                };
+                yield { type: "message_stop" };
+              },
+              finalMessage: async () => ({
+                id: "msg_1",
+                type: "message",
+                role: "assistant",
+                content: [{ type: "text", text: "OK" }],
+                model: "claude-test",
+                stop_reason: "end_turn",
+                stop_sequence: null,
+                usage: { input_tokens: 1, output_tokens: 1 },
+              }),
+            };
+          },
+        };
+      },
+    }));
+
+    const { Agent: MockAgent } = await import("./agent.js");
+    const storage = new SQLiteStorageAdapter(":memory:");
+    await storage.createSession("no-fake-pair-session", "Test");
+    await storage.setSessionSummary("no-fake-pair-session", "Some prior summary text.");
+
+    const agent = new MockAgent({
+      model: "claude-sonnet-4-6",
+      apiKey: "sk-test",
+      tools: [],
+      storage,
+    });
+
+    await agent.run("no-fake-pair-session", "Hello");
+
+    expect(streamCapture).toBeDefined();
+    expect(streamCapture?.firstMessageContent).not.toContain("<context_summary>");
+    expect(streamCapture?.firstMessageContent).not.toContain("Understood. I have the context");
   });
 });

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
+import { buildSummarySystem, stripLegacyXmlWrapper } from "../context/summaryBlock.js";
 import { getLogger } from "../logger/index.js";
 import { HookRegistry } from "../plugins/hooks.js";
 import { loadInstalledPlugins } from "../plugins/loader.js";
@@ -140,23 +141,21 @@ export class Agent {
 
       messages.push({ role: "user", content: userContent });
 
-      // Prepend existing compression summary if present (T015)
+      // Load existing compression summary and inject into system prompt (not messages)
       const existingSummary = await storage.getSessionSummary(sessionId);
-      if (existingSummary !== null) {
-        messages.unshift(
-          { role: "user", content: `<context_summary>${existingSummary}</context_summary>` },
-          {
-            role: "assistant",
-            content: "Understood. I have the context from earlier in this session.",
-          },
-        );
-      }
+      const summarySystemPart =
+        existingSummary !== null ? stripLegacyXmlWrapper(existingSummary) : null;
 
-      const systemParts = [
-        this.subagentPromptActive ? SUBAGENT_SYSTEM_PROMPT : null,
-        skillSystem ?? null,
-      ].filter(Boolean);
-      const system = systemParts.length > 0 ? systemParts.join("\n\n") : undefined;
+      const buildSystem = (summaryPart: string | null, paths: string[]): string | undefined => {
+        const parts = [
+          summaryPart !== null ? buildSummarySystem(summaryPart, paths) : null,
+          this.subagentPromptActive ? SUBAGENT_SYSTEM_PROMPT : null,
+          skillSystem ?? null,
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join("\n\n---\n\n") : undefined;
+      };
+
+      let system = buildSystem(summarySystemPart, []);
 
       // Compress if token count exceeds threshold (T012)
       const compressResult = await compressIfNeeded(messages, {
@@ -166,10 +165,16 @@ export class Agent {
         ...(system !== undefined ? { system } : {}),
         threshold: this.config.contextCompression?.threshold ?? 0.75,
         keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+        ...(existingSummary !== null ? { existingSummary } : {}),
       });
 
       if (compressResult !== null) {
-        await storage.setSessionSummary(sessionId, compressResult.summaryText);
+        // Store the full structured system block so subsequent loads can inject it directly
+        const newSummaryBlock = buildSummarySystem(
+          compressResult.summaryText,
+          compressResult.workingSetPaths,
+        );
+        await storage.setSessionSummary(sessionId, newSummaryBlock);
 
         // Record the oldest kept DB message's timestamp so subsequent loads skip the archived messages.
         // keptCount includes the new_user message (not yet in DB), so DB-kept count = keptCount - 1.
@@ -181,6 +186,7 @@ export class Agent {
 
         messages.length = 0;
         messages.push(...compressResult.messages);
+        system = buildSystem(compressResult.summaryText, compressResult.workingSetPaths);
         callbacks.onContextCompressed?.({
           compressedCount: compressResult.compressedCount,
           keptCount: compressResult.keptCount,
@@ -240,19 +246,10 @@ export class Agent {
     if (history.length === 0) return;
 
     const existingSummary = await storage.getSessionSummary(sessionId);
-    const messages: MessageParam[] = [];
-    if (existingSummary !== null) {
-      messages.push(
-        { role: "user", content: `<context_summary>${existingSummary}</context_summary>` },
-        { role: "assistant", content: "Understood." },
-      );
-    }
-    messages.push(
-      ...history.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content as MessageParam["content"],
-      })),
-    );
+    const messages: MessageParam[] = history.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content as MessageParam["content"],
+    }));
 
     const result = await compressIfNeeded(messages, {
       client: this.client,
@@ -261,10 +258,12 @@ export class Agent {
       ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
       threshold: 0,
       keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+      ...(existingSummary !== null ? { existingSummary } : {}),
     });
 
     if (result !== null) {
-      await storage.setSessionSummary(sessionId, result.summaryText);
+      const newSummaryBlock = buildSummarySystem(result.summaryText, result.workingSetPaths);
+      await storage.setSessionSummary(sessionId, newSummaryBlock);
       callbacks.onContextCompressed?.({
         compressedCount: result.compressedCount,
         keptCount: result.keptCount,
