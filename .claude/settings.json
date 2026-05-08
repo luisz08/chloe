@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*/spex/scripts/spex-init.sh*)",
+      "Bash(*/spex/scripts/spex-ship-statusline.sh*)",
+      "Bash(*/.local/bin/specify*)"
+    ]
+  }
+}
