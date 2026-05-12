@@ -47,3 +47,5 @@ coverage/
 specs/013-plugin-system/test-marketplace/
 
 temp/
+
+docs/ignore/

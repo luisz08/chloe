@@ -243,7 +243,7 @@ export class Agent {
   ): Promise<void> {
     const { storage } = this.config;
     const history = await storage.getMessages(sessionId);
-    if (history.length === 0) return;
+    if (history.length < 2) return;
 
     const existingSummary = await storage.getSessionSummary(sessionId);
     const messages: MessageParam[] = history.map((m) => ({
@@ -251,19 +251,38 @@ export class Agent {
       content: m.content as MessageParam["content"],
     }));
 
+    // When the session is shorter than keepRecentCount, compressIfNeeded's
+    // length guard would silently skip compression. For forced /compact, halve
+    // the history instead so at least something gets summarized.
+    const configuredKeepRecent = this.config.contextCompression?.keepRecentCount ?? 20;
+    const effectiveKeepRecent =
+      history.length > configuredKeepRecent
+        ? configuredKeepRecent
+        : Math.floor(history.length / 2);
+
     const result = await compressIfNeeded(messages, {
       client: this.client,
       model: this.modelConfig.defaultModel,
       fastModel: this.modelConfig.fastModel,
       ...(this.subagentPromptActive ? { system: SUBAGENT_SYSTEM_PROMPT } : {}),
       threshold: 0,
-      keepRecentCount: this.config.contextCompression?.keepRecentCount ?? 20,
+      keepRecentCount: effectiveKeepRecent,
       ...(existingSummary !== null ? { existingSummary } : {}),
     });
 
     if (result !== null) {
       const newSummaryBlock = buildSummarySystem(result.summaryText, result.workingSetPaths);
       await storage.setSessionSummary(sessionId, newSummaryBlock);
+
+      // Mirror the auto-compress path: record the cutoff timestamp so getMessages
+      // filters archived messages on resume. No -1 adjustment here because
+      // forceCompress has no pending new-user message not yet in the DB.
+      const dbKeptCount = Math.min(result.keptCount, history.length);
+      const cutoffMsg = history[history.length - dbKeptCount] ?? history[0];
+      if (cutoffMsg !== undefined) {
+        await storage.setCompressionKeptFrom(sessionId, cutoffMsg.createdAt);
+      }
+
       callbacks.onContextCompressed?.({
         compressedCount: result.compressedCount,
         keptCount: result.keptCount,
